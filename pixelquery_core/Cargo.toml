@@ -1,0 +1,16 @@
+[package]
+name = "pixelquery-core"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "pixelquery_core"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.23", features = ["extension-module"] }
+ndarray = "0.16"
+numpy = "0.23"
+arrow = "53.3"
+parquet = "53.3"
+chrono = "0.4"

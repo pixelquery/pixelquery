@@ -1,0 +1,3 @@
+"""
+PixelQuery Test Suite
+"""
