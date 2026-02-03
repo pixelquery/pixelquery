@@ -1,8 +1,13 @@
 """
-PixelQuery Utilities
+PixelQuery Utility Module
 
-Spatial utilities and helper functions.
+Provides migration and recovery tools.
 """
 
-# Will be populated as utilities are added
-__all__ = []
+from pixelquery.util.migrate import MigrationTool
+from pixelquery.util.recovery import RecoveryTool
+
+__all__ = [
+    'MigrationTool',
+    'RecoveryTool',
+]

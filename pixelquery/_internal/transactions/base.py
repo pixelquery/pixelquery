@@ -1,7 +1,19 @@
 """
 Transaction Management Protocols
 
-ACID transaction protocols for coordinating Arrow + GeoParquet + Iceberg writes.
+ACID transaction protocols for coordinating data writes.
+
+NOTE: With Iceberg as the primary storage backend, transactions are handled
+natively by PyIceberg. These protocols are retained for:
+1. Documentation of transaction semantics
+2. Potential future extension for non-Iceberg backends
+3. Testing/mocking purposes
+
+Iceberg provides built-in:
+- Optimistic concurrency control
+- Snapshot isolation
+- Automatic rollback on failure
+- Time Travel via snapshots
 """
 
 from typing import Protocol, Dict, Any, List

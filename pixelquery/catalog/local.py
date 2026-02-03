@@ -1,8 +1,12 @@
 """
 Local filesystem-based catalog implementation
+
+Supports two backends:
+- Arrow (default): Uses Arrow IPC files + GeoParquet metadata
+- Iceberg: Uses Apache Iceberg tables with SQLite catalog
 """
 
-from typing import List, Optional, Tuple, Dict
+from typing import List, Optional, Tuple, Dict, Union, TYPE_CHECKING
 from pathlib import Path
 from datetime import datetime
 
@@ -11,6 +15,9 @@ from pixelquery._internal.storage.geoparquet import (
     GeoParquetWriter,
     TileMetadata
 )
+
+if TYPE_CHECKING:
+    from pixelquery.catalog.iceberg import IcebergCatalog
 
 
 class LocalCatalog:
@@ -25,17 +32,76 @@ class LocalCatalog:
 
     Examples:
         >>> from pixelquery.catalog import LocalCatalog
-        >>> catalog = LocalCatalog("warehouse")
+        >>>
+        >>> # Auto-detect backend (Arrow or Iceberg)
+        >>> catalog = LocalCatalog.create("warehouse")
+        >>>
+        >>> # Force specific backend
+        >>> catalog = LocalCatalog.create("warehouse", backend="iceberg")
         >>>
         >>> # List all tiles
         >>> tiles = catalog.list_tiles()
         >>>
         >>> # Query tiles by spatial bounds
         >>> tiles = catalog.query_tiles(bounds=(-180, -90, 180, 90))
-        >>>
-        >>> # Get chunk paths for a tile
-        >>> chunks = catalog.get_chunk_paths("x0024_y0041", "2024-01", "red")
     """
+
+    @classmethod
+    def create(
+        cls,
+        warehouse_path: str,
+        backend: str = "auto",
+    ) -> Union["LocalCatalog", "IcebergCatalog"]:
+        """
+        Factory method to create catalog with specified backend
+
+        Args:
+            warehouse_path: Path to warehouse directory
+            backend: Storage backend to use:
+                - "auto": Uses Iceberg if catalog.db exists, else Arrow
+                - "arrow": Forces Arrow IPC + GeoParquet backend
+                - "iceberg": Forces Apache Iceberg backend
+
+        Returns:
+            Catalog instance with appropriate backend
+
+        Examples:
+            >>> # Auto-detect (recommended)
+            >>> catalog = LocalCatalog.create("warehouse")
+
+            >>> # Force Iceberg
+            >>> catalog = LocalCatalog.create("warehouse", backend="iceberg")
+
+            >>> # Force Arrow (legacy)
+            >>> catalog = LocalCatalog.create("warehouse", backend="arrow")
+        """
+        warehouse = Path(warehouse_path)
+
+        if backend == "auto":
+            # Check for Iceberg catalog
+            iceberg_db = warehouse / "catalog.db"
+            if iceberg_db.exists():
+                from pixelquery.catalog.iceberg import IcebergCatalog
+                return IcebergCatalog(str(warehouse_path))
+
+            # Check for Arrow metadata
+            arrow_metadata = warehouse / "metadata.parquet"
+            if arrow_metadata.exists():
+                return cls(str(warehouse_path))
+
+            # Default to Iceberg for new warehouses
+            from pixelquery.catalog.iceberg import IcebergCatalog
+            return IcebergCatalog(str(warehouse_path))
+
+        elif backend == "iceberg":
+            from pixelquery.catalog.iceberg import IcebergCatalog
+            return IcebergCatalog(str(warehouse_path))
+
+        elif backend == "arrow":
+            return cls(str(warehouse_path))
+
+        else:
+            raise ValueError(f"Unknown backend: {backend}. Use 'auto', 'arrow', or 'iceberg'")
 
     def __init__(self, warehouse_path: str):
         """

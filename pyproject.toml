@@ -34,13 +34,17 @@ classifiers = [
 
 dependencies = [
     "numpy>=1.24.0",
-    "pyarrow>=14.0.0",
+    "pyarrow>=17.0.0",  # Requires 17+ for PyIceberg 0.10+ compatibility
+    "pyiceberg>=0.6.0",  # Core dependency for ACID transactions
 ]
 
+[project.scripts]
+pixelquery = "pixelquery.cli:main"
+pq = "pixelquery.cli:main"  # Short alias
+
 [project.optional-dependencies]
-# Full dependencies for production use
+# Full dependencies for production use (COG ingestion, geospatial operations)
 full = [
-    "pyiceberg>=0.6.0",
     "geopandas>=0.14.0",
     "rasterio>=1.3.0",
     "scipy>=1.11.0",

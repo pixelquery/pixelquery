@@ -2,10 +2,15 @@
 Ingestion Pipeline for COG files
 
 Converts Cloud-Optimized GeoTIFF files into PixelQuery's tiled storage format.
+
+Supports two storage backends:
+- Arrow IPC (legacy): Uses Arrow IPC files + GeoParquet metadata
+- Iceberg (default): Uses Apache Iceberg tables with ACID transactions
 """
 
-from typing import Dict, List, Optional, Tuple
-from datetime import datetime
+import logging
+from typing import Dict, List, Optional, Tuple, Union, TYPE_CHECKING
+from datetime import datetime, timezone
 from pathlib import Path
 import numpy as np
 from numpy.typing import NDArray
@@ -16,27 +21,21 @@ from rasterio.crs import CRS
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import multiprocessing as mp
 
+# Module-level logger
+logger = logging.getLogger(__name__)
+
 from pixelquery.io.cog import COGReader
 from pixelquery.grid.tile_grid import FixedTileGrid
 from pixelquery.catalog.local import LocalCatalog
 from pixelquery._internal.storage.geoparquet import TileMetadata
 from pixelquery._internal.storage.arrow_chunk import ArrowChunkWriter
 
-# Try to import Rust resampling functions (10x faster)
-try:
-    from pixelquery_core import resample_bilinear, resample_nearest_neighbor
-    RUST_RESAMPLE_AVAILABLE = True
-except ImportError:
-    from scipy.ndimage import zoom
-    RUST_RESAMPLE_AVAILABLE = False
-    import warnings
-    warnings.warn(
-        "Rust resampling not available. Using scipy (10x slower). "
-        "Run 'pip install maturin && cd pixelquery_core && maturin develop --release' "
-        "to enable Rust optimizations.",
-        category=UserWarning,
-        stacklevel=2
-    )
+if TYPE_CHECKING:
+    from pixelquery.io.iceberg_writer import IcebergPixelWriter
+    from pixelquery.catalog.iceberg import IcebergCatalog
+
+# Resampling using scipy
+from scipy.ndimage import zoom
 
 
 def _process_tile_band_worker(
@@ -115,27 +114,13 @@ def _process_tile_band_worker(
             # Get mask (inverse of valid data mask)
             mask_data = src.read_masks(band_index, window=window) > 0
 
-            # Resample to target resolution
-            if RUST_RESAMPLE_AVAILABLE:
-                # Rust path (10x faster)
-                pixels = resample_bilinear(
-                    band_data,
-                    tile_size_pixels,
-                    tile_size_pixels
-                )
-                mask = resample_nearest_neighbor(
-                    mask_data,
-                    tile_size_pixels,
-                    tile_size_pixels
-                )
-            else:
-                # Python fallback
-                zoom_factors = (
-                    tile_size_pixels / band_data.shape[0],
-                    tile_size_pixels / band_data.shape[1]
-                )
-                pixels = zoom(band_data, zoom_factors, order=1).astype(np.uint16)
-                mask = zoom(mask_data, zoom_factors, order=0).astype(bool)
+            # Resample to target resolution using bilinear interpolation
+            zoom_factors = (
+                tile_size_pixels / band_data.shape[0],
+                tile_size_pixels / band_data.shape[1]
+            )
+            pixels = zoom(band_data, zoom_factors, order=1).astype(np.uint16)
+            mask = zoom(mask_data, zoom_factors, order=0).astype(bool)
 
             # Handle nodata
             if nodata is not None:
@@ -193,7 +178,11 @@ def _process_tile_band_worker(
 
     except Exception as e:
         # Log error but don't crash the worker
-        print(f"Error processing {tile_id}/{band_name}: {e}")
+        logger.error(
+            "Error processing tile-band: %s/%s - %s",
+            tile_id, band_name, str(e),
+            exc_info=True
+        )
         return None
 
 
@@ -204,16 +193,22 @@ class IngestionPipeline:
     Converts Cloud-Optimized GeoTIFF files into tiled storage format with
     automatic tiling, resampling, and metadata management.
 
+    Supports two storage backends:
+    - Arrow IPC (legacy): Uses Arrow IPC files + GeoParquet metadata
+    - Iceberg (default): Uses Apache Iceberg tables with ACID transactions
+
     Attributes:
         warehouse_path: Path to warehouse directory
         tile_grid: TileGrid instance for geographic tiling
-        catalog: LocalCatalog instance for metadata management
+        catalog: Catalog instance for metadata management
+        storage_backend: "auto", "arrow", or "iceberg"
 
     Examples:
+        >>> # Recommended: Iceberg backend with auto-detect
         >>> pipeline = IngestionPipeline(
         ...     warehouse_path="./warehouse",
         ...     tile_grid=FixedTileGrid(),
-        ...     catalog=LocalCatalog("./warehouse")
+        ...     storage_backend="iceberg"
         ... )
         >>> metadata = pipeline.ingest_cog(
         ...     cog_path="sentinel2.tif",
@@ -227,8 +222,9 @@ class IngestionPipeline:
         self,
         warehouse_path: str,
         tile_grid: FixedTileGrid,
-        catalog: LocalCatalog,
-        max_workers: Optional[int] = None
+        catalog: Optional[Union[LocalCatalog, "IcebergCatalog"]] = None,
+        max_workers: Optional[int] = None,
+        storage_backend: str = "auto",
     ):
         """
         Initialize ingestion pipeline
@@ -236,16 +232,61 @@ class IngestionPipeline:
         Args:
             warehouse_path: Path to warehouse directory
             tile_grid: TileGrid instance
-            catalog: LocalCatalog instance
+            catalog: Optional catalog instance (auto-created if None)
             max_workers: Maximum number of parallel workers.
                         None = use CPU count, 1 = sequential processing
+            storage_backend: Storage backend to use:
+                - "auto": Uses Iceberg if catalog.db exists, else Iceberg for new
+                - "arrow": Forces Arrow IPC + GeoParquet backend
+                - "iceberg": Forces Apache Iceberg backend
         """
         self.warehouse_path = Path(warehouse_path)
         self.tile_grid = tile_grid
-        self.catalog = catalog
-        self.chunk_writer = ArrowChunkWriter()
+        self.storage_backend = storage_backend
         self._metadata_buffer = []  # Buffer for accumulating metadata
         self.max_workers = max_workers if max_workers is not None else mp.cpu_count()
+
+        # Determine actual backend
+        self._use_iceberg = self._should_use_iceberg()
+
+        # Initialize catalog
+        if catalog is not None:
+            self.catalog = catalog
+        else:
+            # Auto-create catalog based on backend
+            self.catalog = LocalCatalog.create(
+                str(warehouse_path),
+                backend="iceberg" if self._use_iceberg else "arrow"
+            )
+
+        # Initialize appropriate writer
+        if self._use_iceberg:
+            from pixelquery.io.iceberg_writer import IcebergPixelWriter
+            self.iceberg_writer = IcebergPixelWriter(str(warehouse_path))
+            self.chunk_writer = None  # Not used for Iceberg
+            logger.info("Using Iceberg storage backend")
+        else:
+            self.chunk_writer = ArrowChunkWriter()
+            self.iceberg_writer = None  # Not used for Arrow
+            logger.info("Using Arrow IPC storage backend")
+
+    def _should_use_iceberg(self) -> bool:
+        """Determine whether to use Iceberg backend."""
+        if self.storage_backend == "iceberg":
+            return True
+        elif self.storage_backend == "arrow":
+            return False
+        else:  # "auto"
+            # Check for existing Iceberg catalog
+            iceberg_db = self.warehouse_path / "catalog.db"
+            if iceberg_db.exists():
+                return True
+            # Check for existing Arrow metadata
+            arrow_metadata = self.warehouse_path / "metadata.parquet"
+            if arrow_metadata.exists():
+                return False
+            # Default to Iceberg for new warehouses
+            return True
 
     def ingest_cog(
         self,
@@ -340,9 +381,11 @@ class IngestionPipeline:
                         if metadata is not None:
                             metadata_list.append(metadata)
                     except Exception as e:
-                        print(f"Worker failed: {e}")
+                        logger.error("Worker failed: %s", str(e), exc_info=True)
         else:
-            # SEQUENTIAL PROCESSING (original logic)
+            # SEQUENTIAL PROCESSING
+            observations_batch = []  # For Iceberg batch writes
+
             with COGReader(cog_path) as reader:
                 for tile_id in tiles:
                     tile_bounds = self.tile_grid.get_tile_bounds(tile_id)
@@ -362,27 +405,41 @@ class IngestionPipeline:
                         if not mask.any():
                             continue
 
-                        # Create chunk file path
+                        # Create year_month for path/partition
                         year_month = acquisition_time.strftime("%Y-%m")
-                        chunk_path = f"tiles/{tile_id}/{year_month}/{band_name}.arrow"
-                        full_chunk_path = self.warehouse_path / chunk_path
 
-                        # Ensure directory exists
-                        full_chunk_path.parent.mkdir(parents=True, exist_ok=True)
+                        if self._use_iceberg:
+                            # ICEBERG BACKEND: Batch observations for atomic write
+                            observations_batch.append({
+                                "tile_id": tile_id,
+                                "band": band_name,
+                                "time": acquisition_time,
+                                "pixels": pixels,
+                                "mask": mask,
+                                "product_id": product_id,
+                                "resolution": resolution,
+                                "bounds": tile_bounds,
+                            })
+                        else:
+                            # ARROW BACKEND: Write to Arrow IPC file
+                            chunk_path = f"tiles/{tile_id}/{year_month}/{band_name}.arrow"
+                            full_chunk_path = self.warehouse_path / chunk_path
 
-                        # Write or append to chunk using optimized append method
-                        # This handles both new files and appends efficiently
-                        self.chunk_writer.append_to_chunk(
-                            str(full_chunk_path),
-                            data={
-                                'time': [acquisition_time],
-                                'pixels': [pixels.flatten()],
-                                'mask': [mask.flatten()]
-                            },
-                            product_id=product_id,
-                            resolution=resolution,
-                            metadata={'band': band_name}
-                        )
+                            # Ensure directory exists
+                            full_chunk_path.parent.mkdir(parents=True, exist_ok=True)
+
+                            # Write or append to chunk
+                            self.chunk_writer.append_to_chunk(
+                                str(full_chunk_path),
+                                data={
+                                    'time': [acquisition_time],
+                                    'pixels': [pixels.flatten()],
+                                    'mask': [mask.flatten()]
+                                },
+                                product_id=product_id,
+                                resolution=resolution,
+                                metadata={'band': band_name}
+                            )
 
                         # Compute statistics
                         valid_pixels = pixels[mask]
@@ -390,7 +447,12 @@ class IngestionPipeline:
                         max_value = float(valid_pixels.max()) if len(valid_pixels) > 0 else 0.0
                         mean_value = float(valid_pixels.mean()) if len(valid_pixels) > 0 else 0.0
 
-                        # Create metadata
+                        # Create metadata (for both backends)
+                        if self._use_iceberg:
+                            chunk_path = f"iceberg://{self.warehouse_path}/pixelquery/pixel_data"
+                        else:
+                            chunk_path = f"tiles/{tile_id}/{year_month}/{band_name}.arrow"
+
                         metadata = TileMetadata(
                             tile_id=tile_id,
                             year_month=year_month,
@@ -408,12 +470,22 @@ class IngestionPipeline:
 
                         metadata_list.append(metadata)
 
+            # For Iceberg, write all observations atomically
+            if self._use_iceberg and observations_batch:
+                self.iceberg_writer.write_observations(observations_batch)
+
         # Register all metadata with catalog
         if metadata_list:
-            if auto_commit:
-                self.catalog.add_tile_metadata_batch(metadata_list)
+            if self._use_iceberg:
+                # For Iceberg, data is already written; no separate metadata registration needed
+                # The metadata is embedded in the Iceberg table
+                logger.debug(f"Iceberg: {len(metadata_list)} observations committed")
             else:
-                self._metadata_buffer.extend(metadata_list)
+                # For Arrow, register metadata with GeoParquet catalog
+                if auto_commit:
+                    self.catalog.add_tile_metadata_batch(metadata_list)
+                else:
+                    self._metadata_buffer.extend(metadata_list)
 
         return metadata_list
 
@@ -425,13 +497,20 @@ class IngestionPipeline:
         with auto_commit=False to the catalog in a single batch operation.
         This is much more efficient than writing metadata after each file.
 
+        Note: For Iceberg backend, metadata is committed atomically with data.
+        This method is mainly for Arrow backend compatibility.
+
         Examples:
             >>> pipeline = IngestionPipeline(...)
             >>> for cog_path in cog_files:
             ...     pipeline.ingest_cog(..., auto_commit=False)
             >>> pipeline.flush_metadata()  # Write all metadata at once
         """
-        if self._metadata_buffer:
+        if self._use_iceberg:
+            # Iceberg commits are atomic; nothing to flush
+            logger.debug("Iceberg backend: metadata committed atomically with data")
+            self._metadata_buffer.clear()
+        elif self._metadata_buffer:
             self.catalog.add_tile_metadata_batch(self._metadata_buffer)
             self._metadata_buffer.clear()
 
@@ -530,31 +609,14 @@ class IngestionPipeline:
         if data.shape == target_shape:
             return data
 
-        if RUST_RESAMPLE_AVAILABLE:
-            # Rust path (10x faster)
-            # Convert to uint16 if needed for Rust function
-            if data.dtype == np.uint16:
-                resampled = resample_bilinear(data, target_shape[0], target_shape[1])
-            else:
-                # For other dtypes, use scipy fallback
-                from scipy.ndimage import zoom
-                zoom_factors = (
-                    target_shape[0] / data.shape[0],
-                    target_shape[1] / data.shape[1]
-                )
-                resampled = zoom(data, zoom_factors, order=1)
-                if resampled.shape != target_shape:
-                    resampled = resampled[:target_shape[0], :target_shape[1]]
-        else:
-            # Python fallback
-            from scipy.ndimage import zoom
-            zoom_factors = (
-                target_shape[0] / data.shape[0],
-                target_shape[1] / data.shape[1]
-            )
-            resampled = zoom(data, zoom_factors, order=1)
-            if resampled.shape != target_shape:
-                resampled = resampled[:target_shape[0], :target_shape[1]]
+        # Use scipy bilinear interpolation
+        zoom_factors = (
+            target_shape[0] / data.shape[0],
+            target_shape[1] / data.shape[1]
+        )
+        resampled = zoom(data, zoom_factors, order=1)
+        if resampled.shape != target_shape:
+            resampled = resampled[:target_shape[0], :target_shape[1]]
 
         return resampled.astype(data.dtype)
 

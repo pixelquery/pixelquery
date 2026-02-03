@@ -21,38 +21,51 @@ PixelQuery transforms satellite imagery from a file-based system into a queryabl
 
 ```python
 import pixelquery as pq
-from datetime import datetime
+from pixelquery.core.dataarray import DataArray
+from pixelquery.core.dataset import Dataset
+import numpy as np
 
-# Open a dataset (xarray-like API)
-ds = pq.open_dataset("warehouse", tile_id="x0024_y0041")
+# Create a DataArray (xarray-like API)
+data = np.random.rand(10, 256, 256).astype(np.float32)
+times = np.array(['2024-01-01', '2024-02-01', '2024-03-01', '2024-04-01', '2024-05-01',
+                  '2024-06-01', '2024-07-01', '2024-08-01', '2024-09-01', '2024-10-01'],
+                 dtype='datetime64[D]')
 
-# Select bands and time range
-subset = ds.sel(
-    time=slice("2024-01-01", "2024-12-31"),
-    bands=["red", "nir"]
+red = DataArray(
+    name="red",
+    data=data,
+    dims={"time": 10, "y": 256, "x": 256},
+    coords={"time": times}
 )
 
-# Compute vegetation index
-ndvi = pq.compute_ndvi(ds["red"], ds["nir"])
+# Select by label (sel) or integer index (isel)
+subset = red.sel(time=slice("2024-01-01", "2024-06-01"))  # First 6 months
+first_timestep = red.isel(time=0)  # First observation
 
-# Temporal resampling
-monthly_ndvi = ndvi.resample(time="1M").mean()
+# Compute statistics
+temporal_mean = red.mean(dim="time")  # Mean over time -> (256, 256)
+overall_mean = red.mean()  # Scalar
 
-# Convert to xarray for visualization
-xr_ds = monthly_ndvi.to_xarray()
-xr_ds.plot()
+# Arithmetic operations (xarray-like)
+nir = DataArray(name="nir", data=np.random.rand(10, 256, 256).astype(np.float32),
+                dims={"time": 10, "y": 256, "x": 256})
+ndvi = (nir - red) / (nir + red)  # Element-wise operations
+
+# Convert to numpy
+arrays = red.to_numpy()  # Returns numpy array
 ```
 
 ## Architecture
 
-PixelQuery uses a 3-layer architecture:
+PixelQuery uses a 2-layer architecture:
 
 ```
 ┌─────────────────────────────────────────────┐
 │ Layer 1: Apache Iceberg                     │
-│ • Metadata ACID transactions                │
-│ • Snapshot-based version control            │
-│ • Hidden monthly partitioning               │
+│ • Metadata + Data in Parquet files          │
+│ • ACID transactions (native)                │
+│ • Snapshot-based Time Travel                │
+│ • SQLite-backed catalog                     │
 └─────────────────────────────────────────────┘
                     ↓
 ┌─────────────────────────────────────────────┐
@@ -61,14 +74,6 @@ PixelQuery uses a 3-layer architecture:
 │ • R-tree spatial indexing                   │
 │ • Band statistics (min/max/mean)            │
 │ • DuckDB spatial query integration          │
-└─────────────────────────────────────────────┘
-                    ↓
-┌─────────────────────────────────────────────┐
-│ Layer 3: Arrow IPC                          │
-│ • Monthly spatiotemporal chunks             │
-│ • Variable-length arrays (multi-resolution) │
-│ • Zero-copy reads                           │
-│ • Column-based compression (Zstd, LZ4)      │
 └─────────────────────────────────────────────┘
 ```
 
@@ -122,6 +127,34 @@ result_v1 = pq.query_by_bounds(
 )
 ```
 
+## Implementation Status
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| **DataArray** | | |
+| `sel()` - label-based selection | Implemented | Supports datetime coordinates |
+| `isel()` - integer-based selection | Implemented | |
+| `mean()`, `max()`, `min()` | Implemented | Single or multiple dimensions |
+| `to_numpy()` | Implemented | |
+| Arithmetic operations (+, -, *, /) | Implemented | |
+| `resample()` | Planned (Phase 3) | |
+| `to_xarray()`, `to_pandas()` | Planned (Phase 3) | |
+| **Dataset** | | |
+| `to_numpy()` | Implemented | Returns dict of arrays |
+| `to_xarray()`, `to_pandas()` | Planned (Phase 3) | |
+| **Ingestion** | | |
+| COG ingestion | Implemented | |
+| Parallel processing | Implemented | |
+| **Storage** | | |
+| Iceberg storage | Implemented | Native ACID transactions |
+| Time Travel | Implemented | Via snapshots |
+| GeoParquet catalog | Implemented | |
+| **CLI Tools** | | |
+| `info` - Show warehouse metadata | Implemented | |
+| `migrate` - Arrow to Iceberg migration | Implemented | |
+| `recovery diagnose` - Detect issues | Implemented | |
+| `recovery repair` - Fix warehouse | Implemented | |
+
 ## Performance
 
 **Multi-year time-series queries** (vs COG+STAC):
@@ -133,16 +166,7 @@ result_v1 = pq.query_by_bounds(
 
 *Benchmark: Single tile, 2 bands, monthly aggregation*
 
-**Ingestion Performance** (with Rust optimizations):
-
-| Component | Python | Rust | Speedup |
-|-----------|--------|------|---------|
-| Image resampling | 0.98ms | 0.22ms | **4.4x faster** |
-| Arrow chunk write | ~100ms | 31ms | **3.2x faster** |
-| Arrow chunk append | ~100ms | 13ms | **7.7x faster** |
-| **Total ingestion** | **0.76s/file** | **0.27s/file** | **2.8x faster** |
-
-*Optimizations: Metadata batching + Rust resampling + Rust Arrow I/O = **2.8x total speedup**. See [optimization_summary.md](docs/optimization_summary.md) for details.*
+*See [BENCHMARK_RESULTS.md](./BENCHMARK_RESULTS.md) for detailed methodology and results.*
 
 ## Installation
 
@@ -153,25 +177,6 @@ cd pixelquery
 pip install -e ".[dev]"
 ```
 
-**Optional: Rust Performance Extensions**
-
-For 5.8x faster image resampling, build the Rust extensions:
-
-```bash
-# Install Rust toolchain (if not already installed)
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-
-# Install maturin (Rust-Python build tool)
-pip install maturin
-
-# Build Rust extensions
-cd pixelquery_core
-maturin develop --release
-cd ..
-```
-
-PixelQuery will automatically use Rust resampling if available, otherwise falls back to scipy (with a warning).
-
 **Requirements:**
 - Python 3.11+
 - Apache Iceberg (PyIceberg)
@@ -179,12 +184,30 @@ PixelQuery will automatically use Rust resampling if available, otherwise falls 
 - GeoPandas
 - Rasterio
 - DuckDB
-- **Optional**: Rust toolchain (for performance extensions)
+
+## CLI Tools
+
+PixelQuery provides command-line tools for warehouse management and diagnostics:
+
+```bash
+# Show warehouse metadata and info
+pixelquery info ./warehouse
+
+# Migrate Arrow storage to Iceberg
+pixelquery migrate ./warehouse
+
+# Diagnose warehouse issues
+pixelquery recovery diagnose ./warehouse
+
+# Repair warehouse (fixes corruption, orphaned files, etc)
+pixelquery recovery repair ./warehouse
+```
 
 ## Documentation
 
 - **[API Examples](docs/api-examples.md)** - Real-world usage examples
 - **[Package Structure](docs/package-structure.md)** - Architecture and design
+- **[Iceberg Integration](docs/iceberg-integration.md)** - Apache Iceberg storage and Time Travel
 - **[Optimization Summary](docs/optimization_summary.md)** - Performance optimizations and benchmarks
 - **[Refactoring Progress](docs/refactoring-progress.md)** - Development status
 

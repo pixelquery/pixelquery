@@ -2,6 +2,10 @@
 Arrow IPC Chunk Storage
 
 Implements monthly spatiotemporal chunk storage using Arrow IPC format.
+
+NOTE: With Iceberg integration, this module is retained for backwards compatibility
+with existing Arrow-based warehouses. New warehouses should use Iceberg storage
+via IcebergStorageManager.
 """
 
 from typing import Dict, List, Optional, Tuple
@@ -11,21 +15,6 @@ import pyarrow as pa
 import pyarrow.ipc as ipc
 import numpy as np
 from numpy.typing import NDArray
-import warnings
-
-# Try to import Rust Arrow functions (10x faster)
-try:
-    from pixelquery_core import arrow_write_chunk, arrow_append_to_chunk
-    RUST_ARROW_AVAILABLE = True
-except ImportError:
-    RUST_ARROW_AVAILABLE = False
-    warnings.warn(
-        "Rust Arrow I/O not available. Using pure Python (10x slower). "
-        "Run 'pip install maturin && cd pixelquery_core && maturin develop --release' "
-        "to enable Rust optimizations.",
-        category=UserWarning,
-        stacklevel=2
-    )
 
 
 class ArrowChunkWriter:
@@ -93,62 +82,36 @@ class ArrowChunkWriter:
         # Validate input data
         self._validate_data(data)
 
-        if RUST_ARROW_AVAILABLE:
-            # Rust path (10x faster)
-            Path(path).parent.mkdir(parents=True, exist_ok=True)
+        # Convert to Arrow arrays
+        time_array = pa.array(data['time'], type=pa.timestamp('ms', tz='UTC'))
+        pixels_array = self._convert_pixels_to_arrow(data['pixels'])
+        mask_array = self._convert_mask_to_arrow(data['mask'])
 
-            # Convert datetime to milliseconds
-            times_ms = [int(dt.timestamp() * 1000) for dt in data['time']]
+        # Create record batch
+        batch = pa.RecordBatch.from_arrays(
+            [time_array, pixels_array, mask_array],
+            schema=self.SCHEMA
+        )
 
-            # Convert numpy arrays to lists
-            pixels_list = [arr.astype(np.uint16).tolist() for arr in data['pixels']]
-            masks_list = [arr.astype(bool).tolist() for arr in data['mask']]
+        # Prepare metadata
+        from datetime import timezone
+        chunk_metadata = {
+            'product_id': product_id,
+            'resolution': str(resolution),
+            'num_observations': str(len(data['time'])),
+            'creation_time': datetime.now(timezone.utc).isoformat(),
+        }
+        if metadata:
+            chunk_metadata.update(metadata)
 
-            # Prepare metadata
-            from datetime import timezone
-            chunk_metadata = {
-                'product_id': product_id,
-                'resolution': str(resolution),
-                'num_observations': str(len(data['time'])),
-                'creation_time': datetime.now(timezone.utc).isoformat(),
-            }
-            if metadata:
-                chunk_metadata.update(metadata)
+        # Create schema with metadata
+        schema_with_metadata = self.SCHEMA.with_metadata(chunk_metadata)
 
-            # Call Rust function
-            arrow_write_chunk(path, times_ms, pixels_list, masks_list, chunk_metadata)
-        else:
-            # Python fallback
-            # Convert to Arrow arrays
-            time_array = pa.array(data['time'], type=pa.timestamp('ms', tz='UTC'))
-            pixels_array = self._convert_pixels_to_arrow(data['pixels'])
-            mask_array = self._convert_mask_to_arrow(data['mask'])
-
-            # Create record batch
-            batch = pa.RecordBatch.from_arrays(
-                [time_array, pixels_array, mask_array],
-                schema=self.SCHEMA
-            )
-
-            # Prepare metadata
-            from datetime import timezone
-            chunk_metadata = {
-                'product_id': product_id,
-                'resolution': str(resolution),
-                'num_observations': str(len(data['time'])),
-                'creation_time': datetime.now(timezone.utc).isoformat(),
-            }
-            if metadata:
-                chunk_metadata.update(metadata)
-
-            # Create schema with metadata
-            schema_with_metadata = self.SCHEMA.with_metadata(chunk_metadata)
-
-            # Write to file
-            Path(path).parent.mkdir(parents=True, exist_ok=True)
-            with pa.OSFile(path, 'wb') as sink:
-                with ipc.new_file(sink, schema_with_metadata) as writer:
-                    writer.write_batch(batch)
+        # Write to file
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        with pa.OSFile(path, 'wb') as sink:
+            with ipc.new_file(sink, schema_with_metadata) as writer:
+                writer.write_batch(batch)
 
     def _validate_data(self, data: Dict[str, List]) -> None:
         """Validate input data structure"""
@@ -205,30 +168,6 @@ class ArrowChunkWriter:
         # Validate input data
         self._validate_data(data)
 
-        if RUST_ARROW_AVAILABLE:
-            # Rust path (10x faster) - handles both new file and append
-            Path(path).parent.mkdir(parents=True, exist_ok=True)
-
-            # Convert datetime to milliseconds
-            times_ms = [int(dt.timestamp() * 1000) for dt in data['time']]
-
-            # Convert numpy arrays to lists
-            pixels_list = [arr.astype(np.uint16).tolist() for arr in data['pixels']]
-            masks_list = [arr.astype(bool).tolist() for arr in data['mask']]
-
-            # Prepare metadata
-            chunk_metadata = {
-                'product_id': product_id,
-                'resolution': str(resolution),
-            }
-            if metadata:
-                chunk_metadata.update(metadata)
-
-            # Call Rust function (handles both new and append)
-            arrow_append_to_chunk(path, times_ms, pixels_list, masks_list, chunk_metadata)
-            return  # Done - Rust handled everything
-
-        # Python fallback
         if not path_obj.exists():
             # First write - use regular write_chunk
             self.write_chunk(path, data, product_id, resolution, metadata)
