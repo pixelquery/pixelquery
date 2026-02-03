@@ -122,6 +122,10 @@ class IcebergCatalog:
         if not self.exists():
             return []
 
+        # Always refresh table to see latest snapshots and data
+        # This is needed because separate writer instances may have committed new data
+        self.storage.table.refresh()
+
         # Get tiles from reader
         tiles = self.reader.list_tiles(
             time_range=time_range,
@@ -198,6 +202,10 @@ class IcebergCatalog:
         if not self.exists():
             return []
 
+        # Always refresh table to see latest snapshots and data
+        # This is needed because separate writer instances may have committed new data
+        self.storage.table.refresh()
+
         return self.reader.list_bands(
             tile_id=tile_id,
             as_of_snapshot_id=as_of_snapshot_id,
@@ -231,6 +239,10 @@ class IcebergCatalog:
             return []
 
         from pyiceberg.expressions import And, EqualTo
+
+        # Always refresh table to see latest snapshots and data
+        # This is needed because separate writer instances may have committed new data
+        self.storage.table.refresh()
 
         # Build filters
         filters = [EqualTo("tile_id", tile_id)]
@@ -487,10 +499,14 @@ class IcebergCatalog:
             >>> history[0]['snapshot_id']
             12345
         """
+        # Refresh table to see latest snapshots
+        self.storage.table.refresh()
         return self.storage.get_snapshot_history()
 
     def get_current_snapshot_id(self) -> Optional[int]:
         """Get the current snapshot ID."""
+        # Refresh table to see latest snapshot
+        self.storage.table.refresh()
         return self.storage.get_current_snapshot_id()
 
     def get_table_stats(self) -> Dict[str, Any]:
@@ -500,6 +516,8 @@ class IcebergCatalog:
         Returns:
             Dictionary with table info
         """
+        # Refresh table to see latest stats
+        self.storage.table.refresh()
         return self.storage.get_table_stats()
 
     def __repr__(self) -> str:

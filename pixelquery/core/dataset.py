@@ -288,7 +288,16 @@ class Dataset:
             >>> arrays = ds.to_numpy()
             >>> red = arrays['red']  # Shape: (time, y, x)
         """
-        raise NotImplementedError("to_numpy() will be implemented in Phase 3+")
+        result = {}
+        for band_name in self.bands:
+            if band_name in self.data:
+                band_data = self.data[band_name]
+                # Handle DataArray or raw numpy array
+                if hasattr(band_data, 'data'):
+                    result[band_name] = np.asarray(band_data.data)
+                else:
+                    result[band_name] = np.asarray(band_data)
+        return result
 
     def __repr__(self) -> str:
         """String representation"""

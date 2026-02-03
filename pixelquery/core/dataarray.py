@@ -98,7 +98,48 @@ class DataArray:
             >>> # Select time range
             >>> red.sel(time=slice("2024-01", "2024-12"))
         """
-        raise NotImplementedError("sel() will be implemented in Phase 2+")
+        if not indexers:
+            return self
+
+        # Convert label-based indexers to integer indexers
+        integer_indexers = {}
+        for dim, value in indexers.items():
+            if dim not in self.dims:
+                raise KeyError(f"Dimension '{dim}' not found. Available: {list(self.dims.keys())}")
+
+            if dim not in self.coords:
+                raise KeyError(f"No coordinates for dimension '{dim}'. Use isel() for integer indexing.")
+
+            coord = self.coords[dim]
+
+            if isinstance(value, slice):
+                # Handle slice
+                start_idx = self._find_nearest_index(coord, value.start) if value.start is not None else None
+                stop_idx = self._find_nearest_index(coord, value.stop) if value.stop is not None else None
+                if stop_idx is not None:
+                    stop_idx += 1  # Include the stop value
+                integer_indexers[dim] = slice(start_idx, stop_idx, value.step)
+            else:
+                # Single value - find nearest
+                integer_indexers[dim] = self._find_nearest_index(coord, value)
+
+        return self.isel(**integer_indexers)
+
+    def _find_nearest_index(self, coord: NDArray, value: Any) -> int:
+        """Find index of nearest coordinate value"""
+        if coord.size == 0:
+            raise ValueError("Empty coordinate array")
+
+        # Handle datetime-like coordinates
+        if np.issubdtype(coord.dtype, np.datetime64):
+            if isinstance(value, str):
+                value = np.datetime64(value)
+            coord_numeric = coord.astype('datetime64[ns]').astype(np.int64)
+            value_numeric = np.datetime64(value).astype('datetime64[ns]').astype(np.int64)
+            return int(np.argmin(np.abs(coord_numeric - value_numeric)))
+
+        # Numeric coordinates
+        return int(np.argmin(np.abs(coord - value)))
 
     def isel(self, **indexers: Any) -> "DataArray":
         """
@@ -110,14 +151,56 @@ class DataArray:
         Returns:
             New DataArray with selected data
         """
-        raise NotImplementedError("isel() will be implemented in Phase 2+")
+        if not indexers:
+            return self
 
-    def mean(self, dim: Optional[str] = None) -> Union["DataArray", float]:
+        # Build index tuple and track new dimensions
+        dim_names = list(self.dims.keys())
+        index_tuple = []
+        new_dims = {}
+        new_coords = {}
+
+        for i, dim in enumerate(dim_names):
+            if dim in indexers:
+                idx = indexers[dim]
+                index_tuple.append(idx)
+
+                if isinstance(idx, slice):
+                    # Slice keeps dimension
+                    start, stop, step = idx.start or 0, idx.stop or self.dims[dim], idx.step or 1
+                    new_size = len(range(start, stop, step))
+                    new_dims[dim] = new_size
+                    if dim in self.coords:
+                        new_coords[dim] = self.coords[dim][idx]
+                # Single integer drops dimension
+            else:
+                # Keep full dimension
+                index_tuple.append(slice(None))
+                new_dims[dim] = self.dims[dim]
+                if dim in self.coords:
+                    new_coords[dim] = self.coords[dim]
+
+        # Index the data
+        new_data = self.data[tuple(index_tuple)]
+
+        # If result is scalar, wrap in 0-d array for consistency
+        if isinstance(new_data, (int, float, np.integer, np.floating)):
+            new_data = np.array(new_data)
+
+        return DataArray(
+            name=self.name,
+            data=new_data,
+            dims=new_dims,
+            coords=new_coords,
+            attrs=self.attrs.copy(),
+        )
+
+    def mean(self, dim: Optional[Union[str, list]] = None) -> Union["DataArray", float]:
         """
         Compute mean along dimension
 
         Args:
-            dim: Dimension to reduce (e.g., "time", "y", "x")
+            dim: Dimension to reduce (e.g., "time", "y", "x"), or list of dims
 
         Returns:
             DataArray with reduced dimension or scalar if all dims reduced
@@ -132,15 +215,56 @@ class DataArray:
             >>> # Overall mean
             >>> red.mean()
         """
-        raise NotImplementedError("mean() will be implemented in Phase 2+")
+        return self._reduce_op(np.mean, dim)
 
-    def max(self, dim: Optional[str] = None) -> Union["DataArray", float]:
+    def max(self, dim: Optional[Union[str, list]] = None) -> Union["DataArray", float]:
         """Compute maximum along dimension"""
-        raise NotImplementedError("max() will be implemented in Phase 2+")
+        return self._reduce_op(np.max, dim)
 
-    def min(self, dim: Optional[str] = None) -> Union["DataArray", float]:
+    def min(self, dim: Optional[Union[str, list]] = None) -> Union["DataArray", float]:
         """Compute minimum along dimension"""
-        raise NotImplementedError("min() will be implemented in Phase 2+")
+        return self._reduce_op(np.min, dim)
+
+    def _reduce_op(self, op, dim: Optional[Union[str, list]] = None) -> Union["DataArray", float]:
+        """Apply reduction operation along dimension(s)"""
+        if dim is None:
+            # Reduce all dimensions
+            result = op(self.data)
+            return float(result)
+
+        # Ensure dim is a list
+        if isinstance(dim, str):
+            dims_to_reduce = [dim]
+        else:
+            dims_to_reduce = list(dim)
+
+        # Validate dimensions
+        dim_names = list(self.dims.keys())
+        for d in dims_to_reduce:
+            if d not in dim_names:
+                raise KeyError(f"Dimension '{d}' not found. Available: {dim_names}")
+
+        # Get axis indices
+        axes = tuple(dim_names.index(d) for d in dims_to_reduce)
+
+        # Apply operation
+        new_data = op(self.data, axis=axes)
+
+        # Build new dimensions and coordinates (exclude reduced dims)
+        new_dims = {d: s for d, s in self.dims.items() if d not in dims_to_reduce}
+        new_coords = {d: c for d, c in self.coords.items() if d not in dims_to_reduce}
+
+        if len(new_dims) == 0:
+            # All dimensions reduced - return scalar
+            return float(new_data)
+
+        return DataArray(
+            name=self.name,
+            data=new_data,
+            dims=new_dims,
+            coords=new_coords,
+            attrs=self.attrs.copy(),
+        )
 
     def median(self, dim: Optional[str] = None) -> Union["DataArray", float]:
         """Compute median along dimension"""

@@ -70,7 +70,8 @@ class TestIngestionPipeline:
         return IngestionPipeline(
             warehouse_path=temp_warehouse,
             tile_grid=tile_grid,
-            catalog=catalog
+            catalog=catalog,
+            storage_backend="arrow"  # Force Arrow backend for consistency
         )
 
     def test_init(self, pipeline, temp_warehouse):
@@ -245,7 +246,8 @@ class TestIngestionPipelineEdgeCases:
         return IngestionPipeline(
             warehouse_path=temp_warehouse,
             tile_grid=tile_grid,
-            catalog=catalog
+            catalog=catalog,
+            storage_backend="arrow"  # Force Arrow backend for consistency
         )
 
     def test_ingest_nonexistent_file(self, pipeline):

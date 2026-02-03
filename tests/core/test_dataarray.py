@@ -116,16 +116,94 @@ class TestDataArray:
         array = np.asarray(da)
         assert np.array_equal(array, data)
 
-    def test_sel_not_implemented(self):
-        """Test sel raises NotImplementedError"""
-        da = DataArray(name="red", data=np.random.rand(10, 256, 256))
+    def test_sel_with_coords(self):
+        """Test sel with coordinate labels"""
+        data = np.arange(30).reshape(3, 2, 5).astype(float)
+        times = np.array(['2024-01-01', '2024-02-01', '2024-03-01'], dtype='datetime64[D]')
+        coords = {'time': times, 'y': np.array([0, 1]), 'x': np.array([0, 1, 2, 3, 4])}
+        dims = {'time': 3, 'y': 2, 'x': 5}
 
-        with pytest.raises(NotImplementedError):
-            da.sel(time="2024-01")
+        da = DataArray(name="red", data=data, dims=dims, coords=coords)
 
-    def test_mean_not_implemented(self):
-        """Test mean raises NotImplementedError"""
-        da = DataArray(name="red", data=np.random.rand(10, 256, 256))
+        # Select single time
+        result = da.sel(time='2024-02-01')
+        assert result.shape == (2, 5)
 
-        with pytest.raises(NotImplementedError):
-            da.mean(dim="time")
+    def test_sel_slice(self):
+        """Test sel with slice"""
+        data = np.arange(30).reshape(3, 2, 5).astype(float)
+        times = np.array(['2024-01-01', '2024-02-01', '2024-03-01'], dtype='datetime64[D]')
+        coords = {'time': times}
+        dims = {'time': 3, 'y': 2, 'x': 5}
+
+        da = DataArray(name="red", data=data, dims=dims, coords=coords)
+
+        # Select time range
+        result = da.sel(time=slice('2024-01-01', '2024-02-01'))
+        assert result.shape[0] == 2  # 2 time steps
+
+    def test_isel_basic(self):
+        """Test isel with integer indices"""
+        data = np.arange(60).reshape(3, 4, 5).astype(float)
+        dims = {'time': 3, 'y': 4, 'x': 5}
+
+        da = DataArray(name="red", data=data, dims=dims)
+
+        # Select single index
+        result = da.isel(time=1)
+        assert result.shape == (4, 5)
+        assert 'time' not in result.dims
+
+        # Select slice
+        result2 = da.isel(y=slice(1, 3))
+        assert result2.shape == (3, 2, 5)
+        assert result2.dims['y'] == 2
+
+    def test_mean_overall(self):
+        """Test mean over all dimensions"""
+        data = np.ones((3, 4, 5)) * 10.0
+        dims = {'time': 3, 'y': 4, 'x': 5}
+
+        da = DataArray(name="red", data=data, dims=dims)
+        result = da.mean()
+
+        assert isinstance(result, float)
+        assert result == 10.0
+
+    def test_mean_single_dim(self):
+        """Test mean over single dimension"""
+        data = np.arange(60).reshape(3, 4, 5).astype(float)
+        dims = {'time': 3, 'y': 4, 'x': 5}
+
+        da = DataArray(name="red", data=data, dims=dims)
+        result = da.mean(dim='time')
+
+        assert isinstance(result, DataArray)
+        assert result.shape == (4, 5)
+        assert 'time' not in result.dims
+
+    def test_mean_multiple_dims(self):
+        """Test mean over multiple dimensions"""
+        data = np.ones((3, 4, 5)) * 5.0
+        dims = {'time': 3, 'y': 4, 'x': 5}
+
+        da = DataArray(name="red", data=data, dims=dims)
+        result = da.mean(dim=['y', 'x'])
+
+        assert isinstance(result, DataArray)
+        assert result.shape == (3,)
+        assert result.dims == {'time': 3}
+
+    def test_max_min(self):
+        """Test max and min operations"""
+        data = np.array([[[1, 2], [3, 4]], [[5, 6], [7, 8]]]).astype(float)
+        dims = {'time': 2, 'y': 2, 'x': 2}
+
+        da = DataArray(name="red", data=data, dims=dims)
+
+        assert da.max() == 8.0
+        assert da.min() == 1.0
+
+        max_time = da.max(dim='time')
+        assert max_time.shape == (2, 2)
+        assert max_time.data[0, 0] == 5.0  # max of 1 and 5

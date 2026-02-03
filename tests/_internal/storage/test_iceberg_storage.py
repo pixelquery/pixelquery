@@ -134,7 +134,7 @@ class TestIcebergStorageManager:
         snapshot_id2 = storage.append_data(sample_arrow_table)
 
         assert snapshot_id1 > 0
-        assert snapshot_id2 > snapshot_id1  # New snapshot
+        assert snapshot_id2 != snapshot_id1  # New snapshot (IDs are unique, not sequential)
 
     def test_append_empty_table(self, storage):
         """Test append_data() with empty table"""
@@ -142,7 +142,10 @@ class TestIcebergStorageManager:
 
         # Create empty table with correct schema
         schema = storage.table.schema().as_arrow()
-        empty_table = pa.Table.from_pydict({}, schema=schema)
+
+        # PyArrow requires all schema fields to have empty arrays
+        empty_data = {field.name: [] for field in schema}
+        empty_table = pa.Table.from_pydict(empty_data, schema=schema)
 
         snapshot_id = storage.append_data(empty_table)
 
@@ -161,10 +164,11 @@ class TestIcebergStorageManager:
         snapshot_id2 = storage.append_data(sample_arrow_table)
         snapshot_id3 = storage.append_data(sample_arrow_table)
 
-        # Each append creates a new snapshot
+        # Each append creates a new snapshot (IDs are unique, not sequential)
         assert snapshot_id1 > 0
-        assert snapshot_id2 > snapshot_id1
-        assert snapshot_id3 > snapshot_id2
+        assert snapshot_id2 != snapshot_id1
+        assert snapshot_id3 != snapshot_id2
+        assert snapshot_id3 != snapshot_id1
 
     def test_get_snapshot_history_returns_snapshots(self, storage, sample_arrow_table):
         """Test get_snapshot_history() returns snapshots"""
@@ -311,14 +315,17 @@ class TestIcebergStorageManager:
         for _ in range(15):
             storage.append_data(sample_arrow_table)
 
-        # Would expire oldest 5 (keeping 10)
-        # Note: actual expiration depends on PyIceberg version
+        # Use a timestamp in the future to ensure all snapshots are "old enough"
+        # This is a calculation-only method, not actual expiration
+        from datetime import datetime, timezone
+        future_timestamp_ms = int((datetime.now(timezone.utc).timestamp() + 3600) * 1000)
+
         expired_count = storage.expire_snapshots(
-            older_than_ms=0,  # All are old enough
+            older_than_ms=future_timestamp_ms,  # All current snapshots are older than this
             retain_last=10
         )
 
-        # Should calculate 5 to expire
+        # Should calculate 5 to expire (15 total - 10 to retain)
         assert expired_count == 5
 
 

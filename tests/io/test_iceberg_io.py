@@ -62,7 +62,7 @@ class TestIcebergPixelWriter:
         snapshot_id2 = writer.write_observation(**sample_observation)
 
         assert snapshot_id1 > 0
-        assert snapshot_id2 > snapshot_id1
+        assert snapshot_id2 != snapshot_id1  # Snapshot IDs are unique, not sequential
 
     def test_write_observation_with_all_fields(self, writer):
         """Test write_observation() with all optional fields"""

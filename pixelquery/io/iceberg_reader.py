@@ -107,6 +107,9 @@ class IcebergPixelReader:
             - masks: List of mask arrays
             - metadata: Dict with product_id, resolution, etc.
         """
+        # Always refresh table metadata to ensure snapshot history is current
+        self.storage.table.refresh()
+
         # Build filter expression
         filters = [EqualTo("tile_id", tile_id)]
 
@@ -311,6 +314,9 @@ class IcebergPixelReader:
         Returns:
             Sorted list of unique tile IDs
         """
+        # Always refresh table metadata to ensure snapshot history is current
+        self.storage.table.refresh()
+
         filters = []
 
         if time_range:
@@ -320,20 +326,37 @@ class IcebergPixelReader:
                 LessThanOrEqual("year_month", end.strftime("%Y-%m")),
             ])
 
-        row_filter = And(*filters) if filters else None
+        # Build row filter
+        if len(filters) == 1:
+            row_filter = filters[0]
+        elif len(filters) > 1:
+            row_filter = And(*filters)
+        else:
+            row_filter = None
 
         # Scan with only tile_id column
         if as_of_snapshot_id:
-            scan = self.storage.table.scan(
-                snapshot_id=as_of_snapshot_id,
-                row_filter=row_filter,
-                selected_fields=["tile_id"],
-            )
+            if row_filter is not None:
+                scan = self.storage.table.scan(
+                    snapshot_id=as_of_snapshot_id,
+                    row_filter=row_filter,
+                    selected_fields=["tile_id"],
+                )
+            else:
+                scan = self.storage.table.scan(
+                    snapshot_id=as_of_snapshot_id,
+                    selected_fields=["tile_id"],
+                )
         else:
-            scan = self.storage.table.scan(
-                row_filter=row_filter,
-                selected_fields=["tile_id"],
-            )
+            if row_filter is not None:
+                scan = self.storage.table.scan(
+                    row_filter=row_filter,
+                    selected_fields=["tile_id"],
+                )
+            else:
+                scan = self.storage.table.scan(
+                    selected_fields=["tile_id"],
+                )
 
         arrow_table = scan.to_arrow()
         if arrow_table.num_rows == 0:
@@ -358,23 +381,43 @@ class IcebergPixelReader:
         Returns:
             Sorted list of unique band names
         """
+        # Always refresh table metadata to ensure snapshot history is current
+        self.storage.table.refresh()
+
         filters = []
         if tile_id:
             filters.append(EqualTo("tile_id", tile_id))
 
-        row_filter = And(*filters) if filters else None
+        # Build row filter
+        if len(filters) == 1:
+            row_filter = filters[0]
+        elif len(filters) > 1:
+            row_filter = And(*filters)
+        else:
+            row_filter = None
 
         if as_of_snapshot_id:
-            scan = self.storage.table.scan(
-                snapshot_id=as_of_snapshot_id,
-                row_filter=row_filter,
-                selected_fields=["band"],
-            )
+            if row_filter is not None:
+                scan = self.storage.table.scan(
+                    snapshot_id=as_of_snapshot_id,
+                    row_filter=row_filter,
+                    selected_fields=["band"],
+                )
+            else:
+                scan = self.storage.table.scan(
+                    snapshot_id=as_of_snapshot_id,
+                    selected_fields=["band"],
+                )
         else:
-            scan = self.storage.table.scan(
-                row_filter=row_filter,
-                selected_fields=["band"],
-            )
+            if row_filter is not None:
+                scan = self.storage.table.scan(
+                    row_filter=row_filter,
+                    selected_fields=["band"],
+                )
+            else:
+                scan = self.storage.table.scan(
+                    selected_fields=["band"],
+                )
 
         arrow_table = scan.to_arrow()
         if arrow_table.num_rows == 0:
@@ -400,25 +443,45 @@ class IcebergPixelReader:
         Returns:
             Tuple of (earliest, latest) datetime, or None if no data
         """
+        # Always refresh table metadata to ensure snapshot history is current
+        self.storage.table.refresh()
+
         filters = []
         if tile_id:
             filters.append(EqualTo("tile_id", tile_id))
         if band:
             filters.append(EqualTo("band", band))
 
-        row_filter = And(*filters) if filters else None
+        # Build row filter
+        if len(filters) == 1:
+            row_filter = filters[0]
+        elif len(filters) > 1:
+            row_filter = And(*filters)
+        else:
+            row_filter = None
 
         if as_of_snapshot_id:
-            scan = self.storage.table.scan(
-                snapshot_id=as_of_snapshot_id,
-                row_filter=row_filter,
-                selected_fields=["time"],
-            )
+            if row_filter is not None:
+                scan = self.storage.table.scan(
+                    snapshot_id=as_of_snapshot_id,
+                    row_filter=row_filter,
+                    selected_fields=["time"],
+                )
+            else:
+                scan = self.storage.table.scan(
+                    snapshot_id=as_of_snapshot_id,
+                    selected_fields=["time"],
+                )
         else:
-            scan = self.storage.table.scan(
-                row_filter=row_filter,
-                selected_fields=["time"],
-            )
+            if row_filter is not None:
+                scan = self.storage.table.scan(
+                    row_filter=row_filter,
+                    selected_fields=["time"],
+                )
+            else:
+                scan = self.storage.table.scan(
+                    selected_fields=["time"],
+                )
 
         arrow_table = scan.to_arrow()
         if arrow_table.num_rows == 0:
@@ -449,6 +512,9 @@ class IcebergPixelReader:
         Returns:
             Number of matching observations
         """
+        # Always refresh table metadata to ensure snapshot history is current
+        self.storage.table.refresh()
+
         filters = []
         if tile_id:
             filters.append(EqualTo("tile_id", tile_id))
@@ -461,19 +527,36 @@ class IcebergPixelReader:
                 LessThanOrEqual("year_month", end.strftime("%Y-%m")),
             ])
 
-        row_filter = And(*filters) if filters else None
+        # Build row filter
+        if len(filters) == 1:
+            row_filter = filters[0]
+        elif len(filters) > 1:
+            row_filter = And(*filters)
+        else:
+            row_filter = None
 
         if as_of_snapshot_id:
-            scan = self.storage.table.scan(
-                snapshot_id=as_of_snapshot_id,
-                row_filter=row_filter,
-                selected_fields=["tile_id"],  # Minimal column
-            )
+            if row_filter is not None:
+                scan = self.storage.table.scan(
+                    snapshot_id=as_of_snapshot_id,
+                    row_filter=row_filter,
+                    selected_fields=["tile_id"],  # Minimal column
+                )
+            else:
+                scan = self.storage.table.scan(
+                    snapshot_id=as_of_snapshot_id,
+                    selected_fields=["tile_id"],
+                )
         else:
-            scan = self.storage.table.scan(
-                row_filter=row_filter,
-                selected_fields=["tile_id"],
-            )
+            if row_filter is not None:
+                scan = self.storage.table.scan(
+                    row_filter=row_filter,
+                    selected_fields=["tile_id"],
+                )
+            else:
+                scan = self.storage.table.scan(
+                    selected_fields=["tile_id"],
+                )
 
         return scan.to_arrow().num_rows
 

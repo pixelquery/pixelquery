@@ -85,7 +85,8 @@ class TestEndToEndWorkflow:
         pipeline = IngestionPipeline(
             warehouse_path=temp_warehouse,
             tile_grid=tile_grid,
-            catalog=catalog
+            catalog=catalog,
+            storage_backend="arrow"  # Force Arrow backend for consistency
         )
 
         metadata_list = pipeline.ingest_cog(
@@ -182,7 +183,8 @@ class TestEndToEndWorkflow:
         pipeline = IngestionPipeline(
             warehouse_path=temp_warehouse,
             tile_grid=tile_grid,
-            catalog=catalog
+            catalog=catalog,
+            storage_backend="arrow"  # Force Arrow backend for consistency
         )
 
         pipeline.ingest_cog(
@@ -219,7 +221,8 @@ class TestEndToEndWorkflow:
         pipeline = IngestionPipeline(
             warehouse_path=temp_warehouse,
             tile_grid=tile_grid,
-            catalog=catalog
+            catalog=catalog,
+            storage_backend="arrow"  # Force Arrow backend for consistency
         )
 
         # Ingest multiple time steps
@@ -261,7 +264,8 @@ class TestEndToEndWorkflow:
         pipeline = IngestionPipeline(
             warehouse_path=temp_warehouse,
             tile_grid=tile_grid,
-            catalog=catalog1
+            catalog=catalog1,
+            storage_backend="arrow"  # Force Arrow backend for consistency
         )
 
         pipeline.ingest_cog(

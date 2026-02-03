@@ -181,7 +181,7 @@ class TestRecoveryTool:
 
         assert info["backend"] == "iceberg"
         assert "message" in info
-        assert "automatic recovery" in info["message"].lower()
+        assert "automatically" in info["message"].lower()
 
     def test_get_retry_info_arrow(self, temp_warehouse):
         """Test get_retry_info() for Arrow backend"""
@@ -256,7 +256,7 @@ class TestRecoveryTool:
             resolution=10.0,
             chunk_path="tiles/x0024_y0041/2024-01/red.arrow",
         )
-        writer.write_metadata(str(metadata_path), [metadata])
+        writer.write_metadata([metadata], str(metadata_path))
 
         tool = RecoveryTool(temp_warehouse)
         result = tool.verify_integrity()

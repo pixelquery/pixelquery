@@ -44,14 +44,15 @@ class TestMigrationTool:
         chunk_writer = ArrowChunkWriter()
         data = {
             "time": [datetime(2024, 1, 15, tzinfo=timezone.utc)],
-            "pixels": [np.array([[100, 200], [300, 400]], dtype=np.uint16)],
-            "mask": [np.array([[True, True], [False, True]], dtype=bool)],
+            "pixels": [np.array([100, 200, 300, 400], dtype=np.uint16)],
+            "mask": [np.array([True, True, False, True], dtype=bool)],
         }
-        metadata = {
-            "product_id": "sentinel2_l2a",
-            "resolution": 10.0,
-        }
-        chunk_writer.write_chunk(str(chunk_path), data, metadata)
+        chunk_writer.write_chunk(
+            str(chunk_path),
+            data,
+            product_id="sentinel2_l2a",
+            resolution=10.0
+        )
 
         # Write GeoParquet metadata
         metadata_path = warehouse / "metadata.parquet"
@@ -70,7 +71,7 @@ class TestMigrationTool:
             resolution=10.0,
             chunk_path="tiles/x0024_y0041/2024-01/red.arrow",
         )
-        geoparquet_writer.write_metadata(str(metadata_path), [tile_metadata])
+        geoparquet_writer.write_metadata([tile_metadata], str(metadata_path))
 
         return temp_warehouse
 
@@ -272,14 +273,15 @@ class TestMigrationToolIntegration:
 
                     data = {
                         "time": [datetime(2024, 1, 15, tzinfo=timezone.utc)],
-                        "pixels": [np.array([[100, 200], [300, 400]], dtype=np.uint16)],
-                        "mask": [np.array([[True, True], [False, True]], dtype=bool)],
+                        "pixels": [np.array([100, 200, 300, 400], dtype=np.uint16)],
+                        "mask": [np.array([True, True, False, True], dtype=bool)],
                     }
-                    metadata = {
-                        "product_id": "sentinel2_l2a",
-                        "resolution": 10.0,
-                    }
-                    chunk_writer.write_chunk(str(chunk_path), data, metadata)
+                    chunk_writer.write_chunk(
+                        str(chunk_path),
+                        data,
+                        product_id="sentinel2_l2a",
+                        resolution=10.0
+                    )
 
                     # Add metadata
                     metadata_list.append(TileMetadata(
@@ -299,7 +301,7 @@ class TestMigrationToolIntegration:
 
         # Write GeoParquet metadata
         metadata_path = warehouse / "metadata.parquet"
-        geoparquet_writer.write_metadata(str(metadata_path), metadata_list)
+        geoparquet_writer.write_metadata(metadata_list, str(metadata_path))
 
         # Check migration needed
         tool = MigrationTool(temp_warehouse, backup=True)
@@ -338,14 +340,15 @@ class TestMigrationToolIntegration:
         chunk_writer = ArrowChunkWriter()
         data = {
             "time": [datetime(2024, 1, 15, tzinfo=timezone.utc)],
-            "pixels": [np.array([[100, 200], [300, 400]], dtype=np.uint16)],
-            "mask": [np.array([[True, True], [False, True]], dtype=bool)],
+            "pixels": [np.array([100, 200, 300, 400], dtype=np.uint16)],
+            "mask": [np.array([True, True, False, True], dtype=bool)],
         }
-        metadata = {
-            "product_id": "sentinel2_l2a",
-            "resolution": 10.0,
-        }
-        chunk_writer.write_chunk(str(chunk_path), data, metadata)
+        chunk_writer.write_chunk(
+            str(chunk_path),
+            data,
+            product_id="sentinel2_l2a",
+            resolution=10.0
+        )
 
         # Create invalid Arrow file (corrupted)
         invalid_chunk_path = chunk_dir / "green.arrow"

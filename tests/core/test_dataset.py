@@ -82,6 +82,49 @@ class TestDataset:
         with pytest.raises(NotImplementedError):
             ds.to_pandas()
 
+    def test_to_numpy(self):
+        """Test to_numpy returns dict of arrays"""
+        data = {
+            'red': np.random.rand(10, 256, 256),
+            'nir': np.random.rand(10, 256, 256)
+        }
+        ds = Dataset(
+            tile_id="x0024_y0041",
+            bands=["red", "nir"],
+            data=data
+        )
+
+        result = ds.to_numpy()
+
+        assert isinstance(result, dict)
+        assert 'red' in result
+        assert 'nir' in result
+        assert result['red'].shape == (10, 256, 256)
+        assert np.array_equal(result['red'], data['red'])
+
+    def test_to_numpy_with_dataarray(self):
+        """Test to_numpy with DataArray objects"""
+        from pixelquery.core.dataarray import DataArray
+
+        red_data = np.random.rand(5, 100, 100)
+        nir_data = np.random.rand(5, 100, 100)
+
+        data = {
+            'red': DataArray(name='red', data=red_data, dims={'time': 5, 'y': 100, 'x': 100}),
+            'nir': DataArray(name='nir', data=nir_data, dims={'time': 5, 'y': 100, 'x': 100})
+        }
+        ds = Dataset(
+            tile_id="x0024_y0041",
+            bands=["red", "nir"],
+            data=data
+        )
+
+        result = ds.to_numpy()
+
+        assert isinstance(result, dict)
+        assert result['red'].shape == (5, 100, 100)
+        assert np.array_equal(result['red'], red_data)
+
 
 class TestDatasetResampler:
     """Test DatasetResampler class"""

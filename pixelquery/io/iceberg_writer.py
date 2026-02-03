@@ -255,14 +255,15 @@ class IcebergPixelWriter:
         source_files = [r["source_file"] for r in records]
         ingestion_times = [r["ingestion_time"] for r in records]
 
-        # Create PyArrow arrays
+        # Create PyArrow arrays with explicit element nullability for lists
+        # Must match Iceberg schema where list elements are required
         schema = pa.schema([
             pa.field("tile_id", pa.string(), nullable=False),
             pa.field("band", pa.string(), nullable=False),
             pa.field("year_month", pa.string(), nullable=False),
             pa.field("time", pa.timestamp("us", tz="UTC"), nullable=False),
-            pa.field("pixels", pa.list_(pa.int32()), nullable=False),
-            pa.field("mask", pa.list_(pa.bool_()), nullable=False),
+            pa.field("pixels", pa.list_(pa.field("element", pa.int32(), nullable=False)), nullable=False),
+            pa.field("mask", pa.list_(pa.field("element", pa.bool_(), nullable=False)), nullable=False),
             pa.field("product_id", pa.string(), nullable=False),
             pa.field("resolution", pa.float32(), nullable=False),
             pa.field("bounds_wkb", pa.binary(), nullable=True),

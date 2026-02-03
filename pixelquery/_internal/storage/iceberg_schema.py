@@ -15,6 +15,7 @@ from pyiceberg.types import (
     NestedField,
     StringType,
     TimestampType,
+    TimestamptzType,
     ListType,
     IntegerType,
     BooleanType,
@@ -37,7 +38,7 @@ PIXEL_DATA_SCHEMA = Schema(
     NestedField(3, "year_month", StringType(), required=True),  # Format: "2024-01"
 
     # Temporal data
-    NestedField(4, "time", TimestampType(), required=True),
+    NestedField(4, "time", TimestamptzType(), required=True),
 
     # Pixel data (flattened arrays)
     NestedField(
@@ -67,7 +68,7 @@ PIXEL_DATA_SCHEMA = Schema(
     NestedField(17, "crs", StringType(), required=False),  # Coordinate reference system
     NestedField(18, "transform", StringType(), required=False),  # Affine transform JSON
     NestedField(19, "source_file", StringType(), required=False),  # Original COG path
-    NestedField(20, "ingestion_time", TimestampType(), required=False),
+    NestedField(20, "ingestion_time", TimestamptzType(), required=False),
 )
 
 # Partition specification
