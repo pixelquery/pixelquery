@@ -348,7 +348,11 @@ class IngestionPipeline:
         tiles = self.tile_grid.get_tiles_in_bounds(cog_bounds)
 
         # Process tiles in parallel or sequential
-        if parallel and self.max_workers > 1:
+        # Note: Iceberg requires sequential processing for atomic batch writes
+        use_parallel = parallel and self.max_workers > 1 and not self._use_iceberg
+        if self._use_iceberg and parallel and self.max_workers > 1:
+            logger.debug("Iceberg backend requires sequential processing; parallel disabled")
+        if use_parallel:
             # PARALLEL PROCESSING
             with ProcessPoolExecutor(max_workers=self.max_workers) as executor:
                 futures = []
