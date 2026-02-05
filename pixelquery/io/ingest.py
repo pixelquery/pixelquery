@@ -34,7 +34,16 @@ if TYPE_CHECKING:
     from pixelquery.io.iceberg_writer import IcebergPixelWriter
     from pixelquery.catalog.iceberg import IcebergCatalog
 
-# Resampling using scipy
+# Try to use Rust resampling (4-6x faster than scipy)
+try:
+    from pixelquery_core import resample_bilinear, resample_nearest_neighbor
+    RUST_RESAMPLE_AVAILABLE = True
+    logger.debug("Using Rust resampling (4-6x faster)")
+except ImportError:
+    RUST_RESAMPLE_AVAILABLE = False
+    logger.debug("Rust resampling not available, using scipy fallback")
+
+# Fallback to scipy if Rust not available
 from scipy.ndimage import zoom
 
 
@@ -73,7 +82,13 @@ def _process_tile_band_worker(
     Returns:
         TileMetadata if successful, None if no valid data
     """
-    from scipy.ndimage import zoom
+    # Import resampling functions
+    try:
+        from pixelquery_core import resample_bilinear, resample_nearest_neighbor
+        use_rust = True
+    except ImportError:
+        from scipy.ndimage import zoom
+        use_rust = False
 
     # Calculate target tile size in pixels
     tile_size_pixels = int(tile_size_m / resolution)
@@ -114,13 +129,27 @@ def _process_tile_band_worker(
             # Get mask (inverse of valid data mask)
             mask_data = src.read_masks(band_index, window=window) > 0
 
-            # Resample to target resolution using bilinear interpolation
-            zoom_factors = (
-                tile_size_pixels / band_data.shape[0],
-                tile_size_pixels / band_data.shape[1]
-            )
-            pixels = zoom(band_data, zoom_factors, order=1).astype(np.uint16)
-            mask = zoom(mask_data, zoom_factors, order=0).astype(bool)
+            # Resample to target resolution
+            if use_rust:
+                # Rust resampling (4-6x faster)
+                pixels = resample_bilinear(
+                    band_data.astype(np.uint16),
+                    tile_size_pixels,
+                    tile_size_pixels
+                )
+                mask = resample_nearest_neighbor(
+                    mask_data,
+                    tile_size_pixels,
+                    tile_size_pixels
+                )
+            else:
+                # Scipy fallback
+                zoom_factors = (
+                    tile_size_pixels / band_data.shape[0],
+                    tile_size_pixels / band_data.shape[1]
+                )
+                pixels = zoom(band_data, zoom_factors, order=1).astype(np.uint16)
+                mask = zoom(mask_data, zoom_factors, order=0).astype(bool)
 
             # Handle nodata
             if nodata is not None:
@@ -603,6 +632,9 @@ class IngestionPipeline:
         """
         Resample array to target shape using bilinear interpolation
 
+        Uses Rust implementation when available (4-6x faster),
+        falls back to scipy.ndimage.zoom otherwise.
+
         Args:
             data: Input array (2D)
             target_shape: Target shape (height, width)
@@ -613,14 +645,24 @@ class IngestionPipeline:
         if data.shape == target_shape:
             return data
 
-        # Use scipy bilinear interpolation
-        zoom_factors = (
-            target_shape[0] / data.shape[0],
-            target_shape[1] / data.shape[1]
-        )
-        resampled = zoom(data, zoom_factors, order=1)
-        if resampled.shape != target_shape:
-            resampled = resampled[:target_shape[0], :target_shape[1]]
+        target_h, target_w = target_shape
+
+        if RUST_RESAMPLE_AVAILABLE:
+            # Use Rust resampling (4-6x faster)
+            resampled = resample_bilinear(
+                data.astype(np.uint16),
+                target_h,
+                target_w
+            )
+        else:
+            # Fallback to scipy bilinear interpolation
+            zoom_factors = (
+                target_h / data.shape[0],
+                target_w / data.shape[1]
+            )
+            resampled = zoom(data, zoom_factors, order=1)
+            if resampled.shape != target_shape:
+                resampled = resampled[:target_h, :target_w]
 
         return resampled.astype(data.dtype)
 
