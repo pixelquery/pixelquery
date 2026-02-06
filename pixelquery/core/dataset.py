@@ -261,8 +261,101 @@ class Dataset:
         Examples:
             >>> xr_ds = ds.to_xarray()
             >>> xr_ds["red"].plot()  # Use xarray's plotting
+
+            >>> # Access as DataArray
+            >>> red = xr_ds["red"]
+            >>> red.sel(time="2024-01").plot()
         """
-        raise NotImplementedError("to_xarray() will be implemented in Phase 3+")
+        try:
+            import xarray as xr
+        except ImportError:
+            raise ImportError(
+                "xarray is required for to_xarray(). "
+                "Install with: pip install xarray"
+            )
+
+        # Build data variables
+        data_vars = {}
+        times = None
+        y_coords = None
+        x_coords = None
+
+        for band_name in self.bands:
+            if band_name not in self.data:
+                continue
+
+            band_data = self.data[band_name]
+
+            # Handle list of arrays (time series)
+            if isinstance(band_data, list):
+                if len(band_data) == 0:
+                    continue
+
+                # Stack time series into 3D array (time, y, x)
+                stacked = np.stack(band_data, axis=0)
+
+                # Extract times from metadata if available
+                if times is None and "times" in self.metadata:
+                    times = self.metadata["times"]
+                elif times is None:
+                    times = list(range(len(band_data)))
+
+                # Create coordinate arrays if not set
+                if y_coords is None:
+                    _, h, w = stacked.shape
+                    y_coords = np.arange(h)
+                    x_coords = np.arange(w)
+
+                data_vars[band_name] = (["time", "y", "x"], stacked)
+
+            # Handle single array
+            elif isinstance(band_data, np.ndarray):
+                if band_data.ndim == 2:
+                    # Single observation (y, x)
+                    h, w = band_data.shape
+                    if y_coords is None:
+                        y_coords = np.arange(h)
+                        x_coords = np.arange(w)
+                    data_vars[band_name] = (["y", "x"], band_data)
+                elif band_data.ndim == 3:
+                    # Time series (time, y, x)
+                    t, h, w = band_data.shape
+                    if times is None:
+                        times = list(range(t))
+                    if y_coords is None:
+                        y_coords = np.arange(h)
+                        x_coords = np.arange(w)
+                    data_vars[band_name] = (["time", "y", "x"], band_data)
+
+        # Build coordinates
+        coords = {}
+        if times is not None:
+            coords["time"] = times
+        if y_coords is not None:
+            coords["y"] = y_coords
+        if x_coords is not None:
+            coords["x"] = x_coords
+
+        # Add spatial coordinates if bounds available
+        if "bounds" in self.metadata:
+            minx, miny, maxx, maxy = self.metadata["bounds"]
+            if y_coords is not None and x_coords is not None:
+                # Calculate actual coordinates
+                lon_coords = np.linspace(minx, maxx, len(x_coords))
+                lat_coords = np.linspace(maxy, miny, len(y_coords))  # y is flipped
+                coords["lon"] = (["x"], lon_coords)
+                coords["lat"] = (["y"], lat_coords)
+
+        # Build attributes
+        attrs = {
+            "tile_id": self.tile_id,
+            "crs": "EPSG:4326",
+        }
+        if self.time_range:
+            attrs["time_range"] = str(self.time_range)
+        attrs.update({k: str(v) for k, v in self.metadata.items() if k != "bounds"})
+
+        return xr.Dataset(data_vars, coords=coords, attrs=attrs)
 
     def to_pandas(self) -> Any:  # pd.DataFrame
         """
@@ -275,7 +368,219 @@ class Dataset:
             >>> df = ds.to_pandas()
             >>> df['ndvi'] = (df['band_nir'] - df['band_red']) / (df['band_nir'] + df['band_red'])
         """
-        raise NotImplementedError("to_pandas() will be implemented in Phase 3+")
+        try:
+            import pandas as pd
+        except ImportError:
+            raise ImportError(
+                "pandas is required for to_pandas(). "
+                "Install with: pip install pandas"
+            )
+
+        records = []
+        times = self.metadata.get("times", [])
+
+        for band_name in self.bands:
+            if band_name not in self.data:
+                continue
+
+            band_data = self.data[band_name]
+
+            if isinstance(band_data, list):
+                for t_idx, arr in enumerate(band_data):
+                    time_val = times[t_idx] if t_idx < len(times) else t_idx
+                    # Flatten spatial dimensions
+                    for y_idx in range(arr.shape[0]):
+                        for x_idx in range(arr.shape[1]):
+                            records.append({
+                                "time": time_val,
+                                "y": y_idx,
+                                "x": x_idx,
+                                "band": band_name,
+                                "value": arr[y_idx, x_idx],
+                            })
+
+        return pd.DataFrame(records)
+
+    def to_geotiff(
+        self,
+        output_path: str,
+        band: Optional[str] = None,
+        time_index: int = 0,
+        all_bands: bool = False,
+        all_times: bool = False,
+    ) -> Union[str, List[str]]:
+        """
+        Export to GeoTIFF file(s)
+
+        Args:
+            output_path: Output file path (or directory if all_times=True)
+            band: Band name to export (required if not all_bands)
+            time_index: Time index to export (ignored if all_times=True)
+            all_bands: If True, export all bands as multi-band GeoTIFF
+            all_times: If True, export each time step as separate file
+
+        Returns:
+            Path to created file(s)
+
+        Examples:
+            >>> # Single band, single time
+            >>> ds.to_geotiff("output.tif", band="red", time_index=0)
+
+            >>> # All bands as multi-band GeoTIFF
+            >>> ds.to_geotiff("output.tif", all_bands=True, time_index=0)
+
+            >>> # Export entire time series
+            >>> paths = ds.to_geotiff("outputs/", band="red", all_times=True)
+        """
+        try:
+            import rasterio
+            from rasterio.crs import CRS
+            from rasterio.transform import from_bounds
+        except ImportError:
+            raise ImportError(
+                "rasterio is required for to_geotiff(). "
+                "Install with: pip install rasterio"
+            )
+
+        from pathlib import Path
+
+        # Get bounds
+        bounds = self.metadata.get("bounds")
+        if bounds is None:
+            raise ValueError("Dataset has no bounds metadata. Cannot create GeoTIFF.")
+
+        minx, miny, maxx, maxy = bounds
+
+        # Determine what to export
+        if all_bands:
+            bands_to_export = self.bands
+        elif band:
+            if band not in self.bands:
+                raise ValueError(f"Band '{band}' not found. Available: {self.bands}")
+            bands_to_export = [band]
+        else:
+            raise ValueError("Specify 'band' or set all_bands=True")
+
+        # Get data shape
+        sample_data = None
+        for b in bands_to_export:
+            if b in self.data:
+                d = self.data[b]
+                if isinstance(d, list) and len(d) > 0:
+                    sample_data = d[0]
+                elif isinstance(d, np.ndarray):
+                    sample_data = d if d.ndim == 2 else d[0]
+                break
+
+        if sample_data is None:
+            raise ValueError("No data to export")
+
+        height, width = sample_data.shape
+        transform = from_bounds(minx, miny, maxx, maxy, width, height)
+        crs = CRS.from_epsg(4326)
+
+        # Determine time steps
+        if all_times:
+            # Export multiple files
+            output_dir = Path(output_path)
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            output_files = []
+            times = self.metadata.get("times", [])
+
+            # Determine number of time steps
+            n_times = 0
+            for b in bands_to_export:
+                if b in self.data:
+                    d = self.data[b]
+                    if isinstance(d, list):
+                        n_times = max(n_times, len(d))
+                    elif isinstance(d, np.ndarray) and d.ndim == 3:
+                        n_times = max(n_times, d.shape[0])
+
+            for t_idx in range(n_times):
+                time_str = str(times[t_idx]) if t_idx < len(times) else f"t{t_idx:04d}"
+                # Clean time string for filename
+                time_str = time_str.replace(":", "-").replace(" ", "_")[:20]
+
+                if all_bands:
+                    out_file = output_dir / f"{self.tile_id}_{time_str}_allbands.tif"
+                else:
+                    out_file = output_dir / f"{self.tile_id}_{time_str}_{bands_to_export[0]}.tif"
+
+                self._write_geotiff(
+                    str(out_file), bands_to_export, t_idx, transform, crs, height, width
+                )
+                output_files.append(str(out_file))
+
+            return output_files
+
+        else:
+            # Export single file
+            self._write_geotiff(
+                output_path, bands_to_export, time_index, transform, crs, height, width
+            )
+            return output_path
+
+    def _write_geotiff(
+        self,
+        path: str,
+        bands: List[str],
+        time_index: int,
+        transform,
+        crs,
+        height: int,
+        width: int,
+    ) -> None:
+        """Write a single GeoTIFF file"""
+        import rasterio
+
+        # Collect band data
+        band_arrays = []
+        for band_name in bands:
+            if band_name not in self.data:
+                continue
+
+            band_data = self.data[band_name]
+
+            if isinstance(band_data, list):
+                if time_index < len(band_data):
+                    arr = band_data[time_index]
+                else:
+                    arr = np.zeros((height, width), dtype=np.uint16)
+            elif isinstance(band_data, np.ndarray):
+                if band_data.ndim == 3 and time_index < band_data.shape[0]:
+                    arr = band_data[time_index]
+                elif band_data.ndim == 2:
+                    arr = band_data
+                else:
+                    arr = np.zeros((height, width), dtype=np.uint16)
+            else:
+                arr = np.zeros((height, width), dtype=np.uint16)
+
+            band_arrays.append(arr.astype(np.uint16))
+
+        # Write GeoTIFF
+        profile = {
+            "driver": "GTiff",
+            "dtype": "uint16",
+            "width": width,
+            "height": height,
+            "count": len(band_arrays),
+            "crs": crs,
+            "transform": transform,
+            "compress": "lzw",
+            "tiled": True,
+            "blockxsize": 256,
+            "blockysize": 256,
+        }
+
+        with rasterio.open(path, "w", **profile) as dst:
+            for i, arr in enumerate(band_arrays, 1):
+                dst.write(arr, i)
+
+            # Set band descriptions
+            dst.descriptions = tuple(bands)
 
     def to_numpy(self) -> Dict[str, NDArray]:
         """
