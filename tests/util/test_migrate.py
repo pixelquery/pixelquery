@@ -11,6 +11,8 @@ import numpy as np
 import pyarrow as pa
 import pytest
 
+pytest.importorskip("sqlalchemy", reason="sqlalchemy required for pyiceberg SQL catalog")
+
 from pixelquery._internal.storage.arrow_chunk import ArrowChunkWriter
 from pixelquery._internal.storage.geoparquet import GeoParquetWriter, TileMetadata
 from pixelquery.util.migrate import MigrationTool
@@ -310,7 +312,6 @@ class TestMigrationToolIntegration:
         assert result["backup_path"] is not None
 
         # Verify Iceberg catalog exists
-        pytest.importorskip("sqlalchemy", reason="sqlalchemy required for pyiceberg SQL catalog")
         from pixelquery.catalog.iceberg import IcebergCatalog
 
         catalog = IcebergCatalog(temp_warehouse)
