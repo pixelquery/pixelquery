@@ -4,10 +4,17 @@ Dataset class - xarray-inspired API for PixelQuery
 Provides a familiar interface for data scientists working with satellite imagery.
 """
 
-from typing import Optional, List, Dict, Any, Union, Tuple
+from __future__ import annotations
+
 from datetime import datetime
+from typing import TYPE_CHECKING, Any
+
 import numpy as np
-from numpy.typing import NDArray
+
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
+
+    from pixelquery.core.dataarray import DataArray
 
 
 class Dataset:
@@ -43,10 +50,10 @@ class Dataset:
     def __init__(
         self,
         tile_id: str,
-        time_range: Optional[Tuple[datetime, datetime]] = None,
-        bands: Optional[List[str]] = None,
-        data: Optional[Dict[str, Any]] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        time_range: tuple[datetime, datetime] | None = None,
+        bands: list[str] | None = None,
+        data: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
     ):
         """
         Initialize Dataset
@@ -65,15 +72,15 @@ class Dataset:
         self.metadata = metadata or {}
 
         # Dimensions (xarray-like)
-        self.dims: Dict[str, int] = {}
-        self.coords: Dict[str, NDArray] = {}
+        self.dims: dict[str, int] = {}
+        self.coords: dict[str, NDArray] = {}
 
     def sel(
         self,
-        time: Optional[Union[str, slice, datetime]] = None,
-        bands: Optional[List[str]] = None,
-        **kwargs: Any
-    ) -> "Dataset":
+        time: str | slice | datetime | None = None,
+        bands: list[str] | None = None,
+        **kwargs: Any,
+    ) -> Dataset:
         """
         Select subset of data (xarray.Dataset.sel-like)
 
@@ -127,13 +134,12 @@ class Dataset:
             time_range=new_time_range,
             bands=new_bands,
             data=new_data,
-            metadata=self.metadata.copy()
+            metadata=self.metadata.copy(),
         )
 
     def _process_time_selection(
-        self,
-        time: Union[str, slice, datetime]
-    ) -> Optional[Tuple[datetime, datetime]]:
+        self, time: str | slice | datetime
+    ) -> tuple[datetime, datetime] | None:
         """
         Process time selection parameter
 
@@ -193,7 +199,7 @@ class Dataset:
             # Try ISO format
             return datetime.fromisoformat(time_str)
 
-    def isel(self, **indexers: Any) -> "Dataset":
+    def isel(self, **indexers: Any) -> Dataset:
         """
         Select by integer index (xarray.Dataset.isel-like)
 
@@ -217,10 +223,10 @@ class Dataset:
             time_range=self.time_range,
             bands=self.bands,
             data=self.data.copy(),
-            metadata={**self.metadata, 'indexers': indexers}
+            metadata={**self.metadata, "indexers": indexers},
         )
 
-    def resample(self, time: str) -> "DatasetResampler":
+    def resample(self, time: str) -> DatasetResampler:
         """
         Temporal resampling (xarray.Dataset.resample-like)
 
@@ -239,7 +245,7 @@ class Dataset:
         """
         return DatasetResampler(self, time)
 
-    def mean(self, dim: Optional[str] = None) -> Union["Dataset", NDArray]:
+    def mean(self, dim: str | None = None) -> Dataset | NDArray:
         """
         Compute mean along dimension (xarray.Dataset.mean-like)
 
@@ -268,11 +274,10 @@ class Dataset:
         """
         try:
             import xarray as xr
-        except ImportError:
+        except ImportError as e:
             raise ImportError(
-                "xarray is required for to_xarray(). "
-                "Install with: pip install xarray"
-            )
+                "xarray is required for to_xarray(). Install with: pip install xarray"
+            ) from e
 
         # Build data variables
         data_vars = {}
@@ -370,11 +375,10 @@ class Dataset:
         """
         try:
             import pandas as pd
-        except ImportError:
+        except ImportError as e:
             raise ImportError(
-                "pandas is required for to_pandas(). "
-                "Install with: pip install pandas"
-            )
+                "pandas is required for to_pandas(). Install with: pip install pandas"
+            ) from e
 
         records = []
         times = self.metadata.get("times", [])
@@ -391,24 +395,26 @@ class Dataset:
                     # Flatten spatial dimensions
                     for y_idx in range(arr.shape[0]):
                         for x_idx in range(arr.shape[1]):
-                            records.append({
-                                "time": time_val,
-                                "y": y_idx,
-                                "x": x_idx,
-                                "band": band_name,
-                                "value": arr[y_idx, x_idx],
-                            })
+                            records.append(
+                                {
+                                    "time": time_val,
+                                    "y": y_idx,
+                                    "x": x_idx,
+                                    "band": band_name,
+                                    "value": arr[y_idx, x_idx],
+                                }
+                            )
 
         return pd.DataFrame(records)
 
     def to_geotiff(
         self,
         output_path: str,
-        band: Optional[str] = None,
+        band: str | None = None,
         time_index: int = 0,
         all_bands: bool = False,
         all_times: bool = False,
-    ) -> Union[str, List[str]]:
+    ) -> str | list[str]:
         """
         Export to GeoTIFF file(s)
 
@@ -433,14 +439,12 @@ class Dataset:
             >>> paths = ds.to_geotiff("outputs/", band="red", all_times=True)
         """
         try:
-            import rasterio
             from rasterio.crs import CRS
             from rasterio.transform import from_bounds
-        except ImportError:
+        except ImportError as e:
             raise ImportError(
-                "rasterio is required for to_geotiff(). "
-                "Install with: pip install rasterio"
-            )
+                "rasterio is required for to_geotiff(). Install with: pip install rasterio"
+            ) from e
 
         from pathlib import Path
 
@@ -525,7 +529,7 @@ class Dataset:
     def _write_geotiff(
         self,
         path: str,
-        bands: List[str],
+        bands: list[str],
         time_index: int,
         transform,
         crs,
@@ -582,7 +586,7 @@ class Dataset:
             # Set band descriptions
             dst.descriptions = tuple(bands)
 
-    def to_numpy(self) -> Dict[str, NDArray]:
+    def to_numpy(self) -> dict[str, NDArray]:
         """
         Convert to NumPy arrays
 
@@ -598,7 +602,7 @@ class Dataset:
             if band_name in self.data:
                 band_data = self.data[band_name]
                 # Handle DataArray or raw numpy array
-                if hasattr(band_data, 'data'):
+                if hasattr(band_data, "data"):
                     result[band_name] = np.asarray(band_data.data)
                 else:
                     result[band_name] = np.asarray(band_data)
@@ -617,7 +621,7 @@ class Dataset:
             f"Time range: {self.time_range}"
         )
 
-    def __getitem__(self, key: str) -> "DataArray":
+    def __getitem__(self, key: str) -> DataArray:
         """
         Access band data (xarray-like)
 
@@ -635,6 +639,7 @@ class Dataset:
             raise KeyError(f"Band '{key}' not found. Available: {self.bands}")
 
         from pixelquery.core.dataarray import DataArray
+
         return DataArray(
             name=key,
             data=self.data[key],
@@ -679,10 +684,10 @@ class DatasetResampler:
             data=self.dataset.data.copy(),
             metadata={
                 **self.dataset.metadata,
-                'resampled': True,
-                'freq': self.freq,
-                'aggregation': 'mean'
-            }
+                "resampled": True,
+                "freq": self.freq,
+                "aggregation": "mean",
+            },
         )
 
     def max(self) -> Dataset:
@@ -699,10 +704,10 @@ class DatasetResampler:
             data=self.dataset.data.copy(),
             metadata={
                 **self.dataset.metadata,
-                'resampled': True,
-                'freq': self.freq,
-                'aggregation': 'max'
-            }
+                "resampled": True,
+                "freq": self.freq,
+                "aggregation": "max",
+            },
         )
 
     def min(self) -> Dataset:
@@ -719,10 +724,10 @@ class DatasetResampler:
             data=self.dataset.data.copy(),
             metadata={
                 **self.dataset.metadata,
-                'resampled': True,
-                'freq': self.freq,
-                'aggregation': 'min'
-            }
+                "resampled": True,
+                "freq": self.freq,
+                "aggregation": "min",
+            },
         )
 
     def median(self) -> Dataset:
@@ -739,8 +744,8 @@ class DatasetResampler:
             data=self.dataset.data.copy(),
             metadata={
                 **self.dataset.metadata,
-                'resampled': True,
-                'freq': self.freq,
-                'aggregation': 'median'
-            }
+                "resampled": True,
+                "freq": self.freq,
+                "aggregation": "median",
+            },
         )

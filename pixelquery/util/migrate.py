@@ -10,11 +10,12 @@ Features:
 - Progress callbacks
 """
 
-from typing import Optional, Callable, Dict, Any, List
-from pathlib import Path
-from datetime import datetime, timezone
-import shutil
 import logging
+import shutil
+from collections.abc import Callable
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +62,7 @@ class MigrationTool:
         self._geoparquet_reader = None
         self._iceberg_writer = None
 
-    def check_migration_needed(self) -> Dict[str, Any]:
+    def check_migration_needed(self) -> dict[str, Any]:
         """
         Check migration status
 
@@ -81,6 +82,7 @@ class MigrationTool:
         if iceberg_db.exists():
             try:
                 from pixelquery._internal.storage.iceberg_storage import IcebergStorageManager
+
                 storage = IcebergStorageManager(str(self.warehouse_path))
                 storage.initialize()
                 scan = storage.table.scan(selected_fields=["tile_id"])
@@ -99,9 +101,9 @@ class MigrationTool:
     def migrate(
         self,
         batch_size: int = 100,
-        on_progress: Optional[Callable[[float], None]] = None,
+        on_progress: Callable[[float], None] | None = None,
         dry_run: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Execute migration
 
@@ -180,7 +182,7 @@ class MigrationTool:
                         time = datetime.fromisoformat(str(time))
 
                     if time.tzinfo is None:
-                        time = time.replace(tzinfo=timezone.utc)
+                        time = time.replace(tzinfo=UTC)
 
                     obs = {
                         "tile_id": tile_id,
@@ -233,7 +235,7 @@ class MigrationTool:
             "errors": errors,
         }
 
-    def _verify_migration(self, expected_files: int) -> Dict[str, Any]:
+    def _verify_migration(self, expected_files: int) -> dict[str, Any]:
         """Verify migration integrity"""
         try:
             from pixelquery._internal.storage.iceberg_storage import IcebergStorageManager
@@ -256,7 +258,7 @@ class MigrationTool:
             logger.error(f"Verification failed: {e}")
             return {"error": str(e)}
 
-    def _backup_arrow_files(self) -> Optional[Path]:
+    def _backup_arrow_files(self) -> Path | None:
         """Move Arrow files to backup directory"""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         backup_dir = self.warehouse_path / f"backup_arrow_{timestamp}"
@@ -274,7 +276,7 @@ class MigrationTool:
 
         return backup_dir
 
-    def rollback(self, backup_path: str) -> Dict[str, Any]:
+    def rollback(self, backup_path: str) -> dict[str, Any]:
         """Rollback migration from backup"""
         backup_dir = Path(backup_path)
 

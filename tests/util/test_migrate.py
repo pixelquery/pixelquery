@@ -2,18 +2,18 @@
 Tests for MigrationTool
 """
 
-import pytest
-import tempfile
 import shutil
+import tempfile
+from datetime import UTC, datetime, timezone
 from pathlib import Path
-from datetime import datetime, timezone
 
-import pyarrow as pa
 import numpy as np
+import pyarrow as pa
+import pytest
 
-from pixelquery.util.migrate import MigrationTool
 from pixelquery._internal.storage.arrow_chunk import ArrowChunkWriter
 from pixelquery._internal.storage.geoparquet import GeoParquetWriter, TileMetadata
+from pixelquery.util.migrate import MigrationTool
 
 
 class TestMigrationTool:
@@ -43,16 +43,11 @@ class TestMigrationTool:
 
         chunk_writer = ArrowChunkWriter()
         data = {
-            "time": [datetime(2024, 1, 15, tzinfo=timezone.utc)],
+            "time": [datetime(2024, 1, 15, tzinfo=UTC)],
             "pixels": [np.array([100, 200, 300, 400], dtype=np.uint16)],
             "mask": [np.array([True, True, False, True], dtype=bool)],
         }
-        chunk_writer.write_chunk(
-            str(chunk_path),
-            data,
-            product_id="sentinel2_l2a",
-            resolution=10.0
-        )
+        chunk_writer.write_chunk(str(chunk_path), data, product_id="sentinel2_l2a", resolution=10.0)
 
         # Write GeoParquet metadata
         metadata_path = warehouse / "metadata.parquet"
@@ -159,7 +154,7 @@ class TestMigrationTool:
         def on_progress(progress):
             progress_updates.append(progress)
 
-        result = tool.migrate(on_progress=on_progress, dry_run=True)
+        _result = tool.migrate(on_progress=on_progress, dry_run=True)
 
         assert len(progress_updates) > 0
         # Should have at least one update (100% completion)
@@ -272,32 +267,31 @@ class TestMigrationToolIntegration:
                     chunk_path = chunk_dir / f"{band}.arrow"
 
                     data = {
-                        "time": [datetime(2024, 1, 15, tzinfo=timezone.utc)],
+                        "time": [datetime(2024, 1, 15, tzinfo=UTC)],
                         "pixels": [np.array([100, 200, 300, 400], dtype=np.uint16)],
                         "mask": [np.array([True, True, False, True], dtype=bool)],
                     }
                     chunk_writer.write_chunk(
-                        str(chunk_path),
-                        data,
-                        product_id="sentinel2_l2a",
-                        resolution=10.0
+                        str(chunk_path), data, product_id="sentinel2_l2a", resolution=10.0
                     )
 
                     # Add metadata
-                    metadata_list.append(TileMetadata(
-                        tile_id=tile_id,
-                        year_month=month,
-                        band=band,
-                        bounds=(126.5, 37.0, 127.5, 38.0),
-                        num_observations=1,
-                        min_value=100.0,
-                        max_value=400.0,
-                        mean_value=250.0,
-                        cloud_cover=0.1,
-                        product_id="sentinel2_l2a",
-                        resolution=10.0,
-                        chunk_path=f"tiles/{tile_id}/{month}/{band}.arrow",
-                    ))
+                    metadata_list.append(
+                        TileMetadata(
+                            tile_id=tile_id,
+                            year_month=month,
+                            band=band,
+                            bounds=(126.5, 37.0, 127.5, 38.0),
+                            num_observations=1,
+                            min_value=100.0,
+                            max_value=400.0,
+                            mean_value=250.0,
+                            cloud_cover=0.1,
+                            product_id="sentinel2_l2a",
+                            resolution=10.0,
+                            chunk_path=f"tiles/{tile_id}/{month}/{band}.arrow",
+                        )
+                    )
 
         # Write GeoParquet metadata
         metadata_path = warehouse / "metadata.parquet"
@@ -317,6 +311,7 @@ class TestMigrationToolIntegration:
 
         # Verify Iceberg catalog exists
         from pixelquery.catalog.iceberg import IcebergCatalog
+
         catalog = IcebergCatalog(temp_warehouse)
 
         tiles = catalog.list_tiles()
@@ -339,16 +334,11 @@ class TestMigrationToolIntegration:
 
         chunk_writer = ArrowChunkWriter()
         data = {
-            "time": [datetime(2024, 1, 15, tzinfo=timezone.utc)],
+            "time": [datetime(2024, 1, 15, tzinfo=UTC)],
             "pixels": [np.array([100, 200, 300, 400], dtype=np.uint16)],
             "mask": [np.array([True, True, False, True], dtype=bool)],
         }
-        chunk_writer.write_chunk(
-            str(chunk_path),
-            data,
-            product_id="sentinel2_l2a",
-            resolution=10.0
-        )
+        chunk_writer.write_chunk(str(chunk_path), data, product_id="sentinel2_l2a", resolution=10.0)
 
         # Create invalid Arrow file (corrupted)
         invalid_chunk_path = chunk_dir / "green.arrow"

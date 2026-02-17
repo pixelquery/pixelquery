@@ -9,34 +9,33 @@ Supports two storage backends:
 """
 
 import logging
-from typing import Dict, List, Optional, Tuple, Union, TYPE_CHECKING
-from datetime import datetime, timezone
+import multiprocessing as mp
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING, Union
+
 import numpy as np
 from numpy.typing import NDArray
-import rasterio
-from rasterio.windows import Window, from_bounds
-from rasterio.warp import reproject, Resampling
 from rasterio.crs import CRS
-from concurrent.futures import ProcessPoolExecutor, as_completed
-import multiprocessing as mp
+from rasterio.windows import from_bounds
 
 # Module-level logger
 logger = logging.getLogger(__name__)
 
-from pixelquery.io.cog import COGReader
-from pixelquery.grid.tile_grid import FixedTileGrid
-from pixelquery.catalog.local import LocalCatalog
-from pixelquery._internal.storage.geoparquet import TileMetadata
-from pixelquery._internal.storage.arrow_chunk import ArrowChunkWriter
+from pixelquery._internal.storage.arrow_chunk import ArrowChunkWriter  # noqa: E402
+from pixelquery._internal.storage.geoparquet import TileMetadata  # noqa: E402
+from pixelquery.catalog.local import LocalCatalog  # noqa: E402
+from pixelquery.grid.tile_grid import FixedTileGrid  # noqa: E402
+from pixelquery.io.cog import COGReader  # noqa: E402
 
 if TYPE_CHECKING:
-    from pixelquery.io.iceberg_writer import IcebergPixelWriter
     from pixelquery.catalog.iceberg import IcebergCatalog
 
 # Try to use Rust resampling (4-6x faster than scipy)
 try:
-    from pixelquery_core import resample_bilinear, resample_nearest_neighbor
+    from pixelquery_core import resample_bilinear, resample_nearest_neighbor  # noqa: F401
+
     RUST_RESAMPLE_AVAILABLE = True
     logger.debug("Using Rust resampling (4-6x faster)")
 except ImportError:
@@ -44,13 +43,13 @@ except ImportError:
     logger.debug("Rust resampling not available, using scipy fallback")
 
 # Fallback to scipy if Rust not available
-from scipy.ndimage import zoom
+from scipy.ndimage import zoom  # noqa: E402
 
 
 def _process_tile_band_worker(
     cog_path: str,
     tile_id: str,
-    tile_bounds: Tuple[float, float, float, float],
+    tile_bounds: tuple[float, float, float, float],
     band_index: int,
     band_name: str,
     acquisition_time: datetime,
@@ -58,8 +57,8 @@ def _process_tile_band_worker(
     warehouse_path: str,
     tile_size_m: float,
     resolution: float,
-    nodata: Optional[float]
-) -> Optional[TileMetadata]:
+    nodata: float | None,
+) -> TileMetadata | None:
     """
     Worker function for parallel tile-band processing
 
@@ -85,9 +84,11 @@ def _process_tile_band_worker(
     # Import resampling functions
     try:
         from pixelquery_core import resample_bilinear, resample_nearest_neighbor
+
         use_rust = True
     except ImportError:
         from scipy.ndimage import zoom
+
         use_rust = False
 
     # Calculate target tile size in pixels
@@ -96,6 +97,7 @@ def _process_tile_band_worker(
     # Open COG and extract tile data
     try:
         import rasterio
+
         with rasterio.open(cog_path) as src:
             cog_crs = src.crs
             cog_transform = src.transform
@@ -103,20 +105,14 @@ def _process_tile_band_worker(
             # Convert tile bounds to COG CRS if needed
             if cog_crs and cog_crs != CRS.from_epsg(4326):
                 from rasterio.warp import transform_bounds
-                tile_bounds_cog = transform_bounds(
-                    'EPSG:4326',
-                    cog_crs,
-                    *tile_bounds
-                )
+
+                tile_bounds_cog = transform_bounds("EPSG:4326", cog_crs, *tile_bounds)
             else:
                 tile_bounds_cog = tile_bounds
 
             # Calculate window in COG coordinates
             try:
-                window = from_bounds(
-                    *tile_bounds_cog,
-                    transform=cog_transform
-                )
+                window = from_bounds(*tile_bounds_cog, transform=cog_transform)
             except ValueError:
                 # Tile doesn't overlap COG
                 return None
@@ -133,20 +129,14 @@ def _process_tile_band_worker(
             if use_rust:
                 # Rust resampling (4-6x faster)
                 pixels = resample_bilinear(
-                    band_data.astype(np.uint16),
-                    tile_size_pixels,
-                    tile_size_pixels
+                    band_data.astype(np.uint16), tile_size_pixels, tile_size_pixels
                 )
-                mask = resample_nearest_neighbor(
-                    mask_data,
-                    tile_size_pixels,
-                    tile_size_pixels
-                )
+                mask = resample_nearest_neighbor(mask_data, tile_size_pixels, tile_size_pixels)
             else:
                 # Scipy fallback
                 zoom_factors = (
                     tile_size_pixels / band_data.shape[0],
-                    tile_size_pixels / band_data.shape[1]
+                    tile_size_pixels / band_data.shape[1],
                 )
                 pixels = zoom(band_data, zoom_factors, order=1).astype(np.uint16)
                 mask = zoom(mask_data, zoom_factors, order=0).astype(bool)
@@ -172,13 +162,13 @@ def _process_tile_band_worker(
             chunk_writer.append_to_chunk(
                 str(full_chunk_path),
                 data={
-                    'time': [acquisition_time],
-                    'pixels': [pixels.flatten()],
-                    'mask': [mask.flatten()]
+                    "time": [acquisition_time],
+                    "pixels": [pixels.flatten()],
+                    "mask": [mask.flatten()],
                 },
                 product_id=product_id,
                 resolution=resolution,
-                metadata={'band': band_name}
+                metadata={"band": band_name},
             )
 
             # Compute statistics
@@ -200,7 +190,7 @@ def _process_tile_band_worker(
                 cloud_cover=0.0,
                 product_id=product_id,
                 resolution=resolution,
-                chunk_path=chunk_path
+                chunk_path=chunk_path,
             )
 
             return metadata
@@ -208,9 +198,7 @@ def _process_tile_band_worker(
     except Exception as e:
         # Log error but don't crash the worker
         logger.error(
-            "Error processing tile-band: %s/%s - %s",
-            tile_id, band_name, str(e),
-            exc_info=True
+            "Error processing tile-band: %s/%s - %s", tile_id, band_name, str(e), exc_info=True
         )
         return None
 
@@ -251,8 +239,8 @@ class IngestionPipeline:
         self,
         warehouse_path: str,
         tile_grid: FixedTileGrid,
-        catalog: Optional[Union[LocalCatalog, "IcebergCatalog"]] = None,
-        max_workers: Optional[int] = None,
+        catalog: Union[LocalCatalog, "IcebergCatalog"] | None = None,
+        max_workers: int | None = None,
         storage_backend: str = "auto",
     ):
         """
@@ -284,13 +272,13 @@ class IngestionPipeline:
         else:
             # Auto-create catalog based on backend
             self.catalog = LocalCatalog.create(
-                str(warehouse_path),
-                backend="iceberg" if self._use_iceberg else "arrow"
+                str(warehouse_path), backend="iceberg" if self._use_iceberg else "arrow"
             )
 
         # Initialize appropriate writer
         if self._use_iceberg:
             from pixelquery.io.iceberg_writer import IcebergPixelWriter
+
             self.iceberg_writer = IcebergPixelWriter(str(warehouse_path))
             self.chunk_writer = None  # Not used for Iceberg
             logger.info("Using Iceberg storage backend")
@@ -312,20 +300,18 @@ class IngestionPipeline:
                 return True
             # Check for existing Arrow metadata
             arrow_metadata = self.warehouse_path / "metadata.parquet"
-            if arrow_metadata.exists():
-                return False
-            # Default to Iceberg for new warehouses
-            return True
+            # Default to Iceberg for new warehouses if no Arrow metadata exists
+            return not arrow_metadata.exists()
 
     def ingest_cog(
         self,
         cog_path: str,
         acquisition_time: datetime,
         product_id: str,
-        band_mapping: Dict[int, str],
+        band_mapping: dict[int, str],
         auto_commit: bool = True,
-        parallel: bool = True
-    ) -> List[TileMetadata]:
+        parallel: bool = True,
+    ) -> list[TileMetadata]:
         """
         Ingest COG file into warehouse
 
@@ -362,16 +348,16 @@ class IngestionPipeline:
             ...     band_mapping={1: "blue", 2: "green", 3: "red", 4: "nir"}
             ... )
             >>> len(metadata_list)
-            16  # 4 tiles × 4 bands
+            16  # 4 tiles x 4 bands
         """
         metadata_list = []
 
         # Get COG properties
         with COGReader(cog_path) as reader:
-            cog_bounds = reader.get_bounds(target_crs='EPSG:4326')
+            cog_bounds = reader.get_bounds(target_crs="EPSG:4326")
             cog_metadata = reader.get_metadata()
             resolution = reader.get_resolution()
-            nodata = cog_metadata.get('nodata')
+            nodata = cog_metadata.get("nodata")
 
         # Find overlapping tiles
         tiles = self.tile_grid.get_tiles_in_bounds(cog_bounds)
@@ -403,7 +389,7 @@ class IngestionPipeline:
                             warehouse_path=str(self.warehouse_path),
                             tile_size_m=self.tile_grid.tile_size_m,
                             resolution=resolution,
-                            nodata=nodata
+                            nodata=nodata,
                         )
                         futures.append(future)
 
@@ -431,7 +417,7 @@ class IngestionPipeline:
                             band_index=band_index,
                             tile_bounds=tile_bounds,
                             resolution=resolution,
-                            nodata=nodata
+                            nodata=nodata,
                         )
 
                         # Skip if no valid data in this tile
@@ -443,16 +429,18 @@ class IngestionPipeline:
 
                         if self._use_iceberg:
                             # ICEBERG BACKEND: Batch observations for atomic write
-                            observations_batch.append({
-                                "tile_id": tile_id,
-                                "band": band_name,
-                                "time": acquisition_time,
-                                "pixels": pixels,
-                                "mask": mask,
-                                "product_id": product_id,
-                                "resolution": resolution,
-                                "bounds": tile_bounds,
-                            })
+                            observations_batch.append(
+                                {
+                                    "tile_id": tile_id,
+                                    "band": band_name,
+                                    "time": acquisition_time,
+                                    "pixels": pixels,
+                                    "mask": mask,
+                                    "product_id": product_id,
+                                    "resolution": resolution,
+                                    "bounds": tile_bounds,
+                                }
+                            )
                         else:
                             # ARROW BACKEND: Write to Arrow IPC file
                             chunk_path = f"tiles/{tile_id}/{year_month}/{band_name}.arrow"
@@ -465,13 +453,13 @@ class IngestionPipeline:
                             self.chunk_writer.append_to_chunk(
                                 str(full_chunk_path),
                                 data={
-                                    'time': [acquisition_time],
-                                    'pixels': [pixels.flatten()],
-                                    'mask': [mask.flatten()]
+                                    "time": [acquisition_time],
+                                    "pixels": [pixels.flatten()],
+                                    "mask": [mask.flatten()],
                                 },
                                 product_id=product_id,
                                 resolution=resolution,
-                                metadata={'band': band_name}
+                                metadata={"band": band_name},
                             )
 
                         # Compute statistics
@@ -498,7 +486,7 @@ class IngestionPipeline:
                             cloud_cover=0.0,  # TODO: Implement cloud mask detection
                             product_id=product_id,
                             resolution=resolution,
-                            chunk_path=chunk_path
+                            chunk_path=chunk_path,
                         )
 
                         metadata_list.append(metadata)
@@ -553,7 +541,7 @@ class IngestionPipeline:
         band_index: int,
         tile_bounds: tuple,
         resolution: float,
-        nodata: float = None
+        nodata: float | None = None,
     ) -> tuple:
         """
         Extract and resample data for a tile
@@ -573,26 +561,20 @@ class IngestionPipeline:
 
         # Get COG metadata
         cog_meta = reader.get_metadata()
-        cog_crs = cog_meta['crs']
-        cog_transform = cog_meta['transform']
+        cog_crs = cog_meta["crs"]
+        cog_transform = cog_meta["transform"]
 
         # Convert tile bounds to COG CRS if needed
         if cog_crs and cog_crs != CRS.from_epsg(4326):
             from rasterio.warp import transform_bounds
-            tile_bounds_cog = transform_bounds(
-                'EPSG:4326',
-                cog_crs,
-                *tile_bounds
-            )
+
+            tile_bounds_cog = transform_bounds("EPSG:4326", cog_crs, *tile_bounds)
         else:
             tile_bounds_cog = tile_bounds
 
         # Calculate window in COG coordinates
         try:
-            window = from_bounds(
-                *tile_bounds_cog,
-                transform=cog_transform
-            )
+            window = from_bounds(*tile_bounds_cog, transform=cog_transform)
 
             # Read data from window
             data = reader.read_window(window, band_index=band_index)
@@ -612,8 +594,7 @@ class IngestionPipeline:
 
         # Resample to target tile size
         resampled_pixels = self._resample_array(
-            data,
-            target_shape=(tile_size_pixels, tile_size_pixels)
+            data, target_shape=(tile_size_pixels, tile_size_pixels)
         )
 
         # Create mask
@@ -624,11 +605,7 @@ class IngestionPipeline:
 
         return resampled_pixels, mask
 
-    def _resample_array(
-        self,
-        data: NDArray,
-        target_shape: tuple
-    ) -> NDArray:
+    def _resample_array(self, data: NDArray, target_shape: tuple) -> NDArray:
         """
         Resample array to target shape using bilinear interpolation
 
@@ -649,17 +626,10 @@ class IngestionPipeline:
 
         if RUST_RESAMPLE_AVAILABLE:
             # Use Rust resampling (4-6x faster)
-            resampled = resample_bilinear(
-                data.astype(np.uint16),
-                target_h,
-                target_w
-            )
+            resampled = resample_bilinear(data.astype(np.uint16), target_h, target_w)
         else:
             # Fallback to scipy bilinear interpolation
-            zoom_factors = (
-                target_h / data.shape[0],
-                target_w / data.shape[1]
-            )
+            zoom_factors = (target_h / data.shape[0], target_w / data.shape[1])
             resampled = zoom(data, zoom_factors, order=1)
             if resampled.shape != target_shape:
                 resampled = resampled[:target_h, :target_w]
@@ -673,3 +643,112 @@ class IngestionPipeline:
             f"  Warehouse: {self.warehouse_path}\\n"
             f"  Tile Grid: {self.tile_grid}"
         )
+
+
+class IcechunkIngestionPipeline:
+    """
+    Ingest COG files as virtual zarr references in Icechunk.
+
+    Unlike IngestionPipeline which reads and copies pixel data,
+    this pipeline only registers virtual byte-range references
+    to the original COG files (~449x faster).
+
+    Examples:
+        >>> pipeline = IcechunkIngestionPipeline(
+        ...     repo_path="./warehouse",
+        ...     vcc_data_path="/data/satellite/",
+        ... )
+        >>> pipeline.ingest_cog(
+        ...     cog_path="/data/satellite/scene.tif",
+        ...     acquisition_time=datetime(2025, 4, 6),
+        ...     product_id="planet_sr",
+        ...     band_names=["red", "green", "blue", "nir"],
+        ... )
+    """
+
+    def __init__(
+        self,
+        repo_path: str,
+        storage_type: str = "local",
+        storage_config: dict | None = None,
+        vcc_prefix: str | None = None,
+        vcc_data_path: str | None = None,
+    ):
+        """
+        Args:
+            repo_path: Path to the Icechunk repository root
+            storage_type: "local", "s3", or "gcs"
+            storage_config: Cloud storage config
+            vcc_prefix: Virtual Chunk Container URL prefix
+            vcc_data_path: Local filesystem path for VCC store
+        """
+        from pixelquery._internal.storage.icechunk_storage import IcechunkStorageManager
+        from pixelquery.io.icechunk_writer import IcechunkVirtualWriter
+
+        self.storage = IcechunkStorageManager(
+            repo_path,
+            storage_type=storage_type,
+            storage_config=storage_config,
+            vcc_prefix=vcc_prefix,
+            vcc_data_path=vcc_data_path,
+        )
+        self.storage.initialize()
+        self.writer = IcechunkVirtualWriter(self.storage)
+
+    def ingest_cog(
+        self,
+        cog_path: str,
+        acquisition_time: datetime,
+        product_id: str,
+        band_names: list[str],
+        bounds: tuple | None = None,
+        crs: str | None = None,
+        cloud_cover: float | None = None,
+        mask_path: str | None = None,
+    ) -> str:
+        """
+        Register a COG as virtual zarr references (no data copy).
+
+        Args:
+            cog_path: Path to COG file
+            acquisition_time: Scene acquisition timestamp
+            product_id: Product identifier
+            band_names: Band name list
+            bounds: (minx, miny, maxx, maxy). Auto-detected if None.
+            crs: CRS string. Auto-detected if None.
+            cloud_cover: Cloud cover percentage
+            mask_path: Path to cloud mask file (e.g. UDM2)
+
+        Returns:
+            Group name (e.g. "scene_20250101_a1b2c3d4")
+        """
+        return self.writer.ingest_cog(
+            cog_path=cog_path,
+            acquisition_time=acquisition_time,
+            product_id=product_id,
+            band_names=band_names,
+            bounds=bounds,
+            crs=crs,
+            cloud_cover=cloud_cover,
+            mask_path=mask_path,
+        )
+
+    def ingest_cogs(
+        self,
+        cog_infos: list[dict],
+        message: str = "Batch ingest",
+    ) -> list[str]:
+        """
+        Batch ingest multiple COGs in a single atomic commit.
+
+        Args:
+            cog_infos: List of dicts with ingest_cog() params
+            message: Commit message
+
+        Returns:
+            List of group names
+        """
+        return self.writer.ingest_cogs_batch(cog_infos, commit_message=message)
+
+    def __repr__(self) -> str:
+        return f"<IcechunkIngestionPipeline repo={self.storage.repo_path}>"

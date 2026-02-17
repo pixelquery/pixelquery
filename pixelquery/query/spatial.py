@@ -7,16 +7,17 @@ Supports:
 - Point-in-tile queries
 """
 
-from typing import List, Tuple, Dict, Any, Union, Optional
 import json
 from pathlib import Path
+from typing import Optional, Union
 
 from pixelquery.grid.tile_grid import FixedTileGrid
 
 # Try to import shapely for geometry operations
 try:
-    from shapely.geometry import shape, box, Point, Polygon, MultiPolygon
+    from shapely.geometry import MultiPolygon, Point, Polygon, box, shape  # noqa: F401
     from shapely.geometry.base import BaseGeometry
+
     SHAPELY_AVAILABLE = True
 except ImportError:
     SHAPELY_AVAILABLE = False
@@ -24,10 +25,10 @@ except ImportError:
 
 
 def query_tiles_by_geometry(
-    geometry: Union[Dict, "BaseGeometry", str, Path],
-    tile_grid: Optional[FixedTileGrid] = None,
-    available_tiles: Optional[List[str]] = None,
-) -> List[str]:
+    geometry: Union[dict, "BaseGeometry", str, Path],
+    tile_grid: FixedTileGrid | None = None,
+    available_tiles: list[str] | None = None,
+) -> list[str]:
     """
     Find tiles that intersect with a GeoJSON geometry
 
@@ -57,8 +58,7 @@ def query_tiles_by_geometry(
     """
     if not SHAPELY_AVAILABLE:
         raise ImportError(
-            "shapely is required for geometry queries. "
-            "Install with: pip install shapely"
+            "shapely is required for geometry queries. Install with: pip install shapely"
         )
 
     # Initialize grid
@@ -93,7 +93,7 @@ def query_tiles_by_geometry(
 def query_tiles_by_point(
     lon: float,
     lat: float,
-    tile_grid: Optional[FixedTileGrid] = None,
+    tile_grid: FixedTileGrid | None = None,
 ) -> str:
     """
     Get the tile containing a point
@@ -116,8 +116,8 @@ def query_tiles_by_point(
 
 
 def geometry_to_bbox(
-    geometry: Union[Dict, "BaseGeometry", str, Path],
-) -> Tuple[float, float, float, float]:
+    geometry: Union[dict, "BaseGeometry", str, Path],
+) -> tuple[float, float, float, float]:
     """
     Get bounding box from geometry
 
@@ -140,8 +140,8 @@ def geometry_to_bbox(
 
 
 def clip_tile_to_geometry(
-    tile_bounds: Tuple[float, float, float, float],
-    geometry: Union[Dict, "BaseGeometry"],
+    tile_bounds: tuple[float, float, float, float],
+    geometry: Union[dict, "BaseGeometry"],
 ) -> Optional["BaseGeometry"]:
     """
     Clip tile bounds to geometry
@@ -168,7 +168,7 @@ def clip_tile_to_geometry(
 
 
 def _parse_geometry(
-    geometry: Union[Dict, "BaseGeometry", str, Path],
+    geometry: Union[dict, "BaseGeometry", str, Path],
 ) -> "BaseGeometry":
     """
     Parse geometry from various input formats
@@ -183,7 +183,7 @@ def _parse_geometry(
         raise ImportError("shapely is required. Install with: pip install shapely")
 
     # Already a Shapely geometry
-    if hasattr(geometry, 'bounds') and hasattr(geometry, 'intersects'):
+    if hasattr(geometry, "bounds") and hasattr(geometry, "intersects"):
         return geometry
 
     # Path to GeoJSON file
@@ -203,7 +203,7 @@ def _parse_geometry(
     raise TypeError(f"Unsupported geometry type: {type(geometry)}")
 
 
-def _geojson_to_geometry(geojson: Dict) -> "BaseGeometry":
+def _geojson_to_geometry(geojson: dict) -> "BaseGeometry":
     """
     Convert GeoJSON dict to Shapely geometry
 
@@ -219,6 +219,7 @@ def _geojson_to_geometry(geojson: Dict) -> "BaseGeometry":
             return shape(features[0]["geometry"])
         else:
             from shapely.ops import unary_union
+
             geometries = [shape(f["geometry"]) for f in features]
             return unary_union(geometries)
 
@@ -256,21 +257,19 @@ class SpatialQuery:
         ...     .get_tiles())
     """
 
-    def __init__(self, tile_grid: Optional[FixedTileGrid] = None):
+    def __init__(self, tile_grid: FixedTileGrid | None = None):
         self.grid = tile_grid or FixedTileGrid()
         self._geometry = None
         self._available_tiles = None
 
-    def from_geojson(self, geojson: Union[Dict, str, Path]) -> "SpatialQuery":
+    def from_geojson(self, geojson: dict | str | Path) -> "SpatialQuery":
         """Set query geometry from GeoJSON"""
         if not SHAPELY_AVAILABLE:
             raise ImportError("shapely is required. Install with: pip install shapely")
         self._geometry = _parse_geometry(geojson)
         return self
 
-    def from_bbox(
-        self, minx: float, miny: float, maxx: float, maxy: float
-    ) -> "SpatialQuery":
+    def from_bbox(self, minx: float, miny: float, maxx: float, maxy: float) -> "SpatialQuery":
         """Set query geometry from bounding box"""
         if not SHAPELY_AVAILABLE:
             raise ImportError("shapely is required. Install with: pip install shapely")
@@ -296,12 +295,12 @@ class SpatialQuery:
         self._geometry = self._geometry.buffer(buffer_deg)
         return self
 
-    def filter_available(self, available_tiles: List[str]) -> "SpatialQuery":
+    def filter_available(self, available_tiles: list[str]) -> "SpatialQuery":
         """Filter results to available tiles only"""
         self._available_tiles = available_tiles
         return self
 
-    def get_tiles(self) -> List[str]:
+    def get_tiles(self) -> list[str]:
         """Execute query and return matching tiles"""
         if self._geometry is None:
             raise ValueError("Set geometry first with from_* methods")
@@ -312,7 +311,7 @@ class SpatialQuery:
             available_tiles=self._available_tiles,
         )
 
-    def get_bbox(self) -> Tuple[float, float, float, float]:
+    def get_bbox(self) -> tuple[float, float, float, float]:
         """Get bounding box of current geometry"""
         if self._geometry is None:
             raise ValueError("Set geometry first with from_* methods")

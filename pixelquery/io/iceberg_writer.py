@@ -10,17 +10,16 @@ Features:
 - Support for geometry bounds (WKB format)
 """
 
-from typing import Dict, List, Optional, Any, Union
-from datetime import datetime, timezone
-from pathlib import Path
 import logging
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
 
-import pyarrow as pa
 import numpy as np
+import pyarrow as pa
 from numpy.typing import NDArray
 
 from pixelquery._internal.storage.iceberg_storage import IcebergStorageManager
-from pixelquery._internal.storage.iceberg_schema import TILE_SIZE_PIXELS
 
 logger = logging.getLogger(__name__)
 
@@ -78,11 +77,11 @@ class IcebergPixelWriter:
         mask: NDArray,
         product_id: str,
         resolution: float,
-        bounds: Optional[tuple] = None,
-        cloud_cover: Optional[float] = None,
-        crs: Optional[str] = None,
-        transform: Optional[str] = None,
-        source_file: Optional[str] = None,
+        bounds: tuple | None = None,
+        cloud_cover: float | None = None,
+        crs: str | None = None,
+        transform: str | None = None,
+        source_file: str | None = None,
     ) -> int:
         """
         Write a single observation
@@ -123,7 +122,7 @@ class IcebergPixelWriter:
 
     def write_observations(
         self,
-        observations: List[Dict[str, Any]],
+        observations: list[dict[str, Any]],
     ) -> int:
         """
         Write multiple observations atomically
@@ -153,7 +152,7 @@ class IcebergPixelWriter:
         logger.debug(f"Writing {len(observations)} observations")
 
         records = []
-        ingestion_time = datetime.now(timezone.utc)
+        ingestion_time = datetime.now(UTC)
 
         for obs in observations:
             record = self._prepare_record(obs, ingestion_time)
@@ -170,9 +169,9 @@ class IcebergPixelWriter:
 
     def _prepare_record(
         self,
-        obs: Dict[str, Any],
+        obs: dict[str, Any],
         ingestion_time: datetime,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Prepare a single observation record for storage."""
         pixels = obs["pixels"]
         mask = obs["mask"]
@@ -201,13 +200,14 @@ class IcebergPixelWriter:
         if obs.get("bounds"):
             try:
                 from shapely.geometry import box
+
                 bounds_wkb = box(*obs["bounds"]).wkb
             except ImportError:
                 logger.warning("shapely not installed, skipping bounds geometry")
 
         # Ensure time is timezone-aware
         if time.tzinfo is None:
-            time = time.replace(tzinfo=timezone.utc)
+            time = time.replace(tzinfo=UTC)
 
         # Build record
         record = {
@@ -233,7 +233,7 @@ class IcebergPixelWriter:
 
         return record
 
-    def _create_arrow_table(self, records: List[Dict[str, Any]]) -> pa.Table:
+    def _create_arrow_table(self, records: list[dict[str, Any]]) -> pa.Table:
         """Create PyArrow table from records."""
         # Define arrays
         tile_ids = [r["tile_id"] for r in records]
@@ -257,26 +257,36 @@ class IcebergPixelWriter:
 
         # Create PyArrow arrays with explicit element nullability for lists
         # Must match Iceberg schema where list elements are required
-        schema = pa.schema([
-            pa.field("tile_id", pa.string(), nullable=False),
-            pa.field("band", pa.string(), nullable=False),
-            pa.field("year_month", pa.string(), nullable=False),
-            pa.field("time", pa.timestamp("us", tz="UTC"), nullable=False),
-            pa.field("pixels", pa.list_(pa.field("element", pa.int32(), nullable=False)), nullable=False),
-            pa.field("mask", pa.list_(pa.field("element", pa.bool_(), nullable=False)), nullable=False),
-            pa.field("product_id", pa.string(), nullable=False),
-            pa.field("resolution", pa.float32(), nullable=False),
-            pa.field("bounds_wkb", pa.binary(), nullable=True),
-            pa.field("num_pixels", pa.int32(), nullable=False),
-            pa.field("min_value", pa.float32(), nullable=True),
-            pa.field("max_value", pa.float32(), nullable=True),
-            pa.field("mean_value", pa.float32(), nullable=True),
-            pa.field("cloud_cover", pa.float32(), nullable=True),
-            pa.field("crs", pa.string(), nullable=True),
-            pa.field("transform", pa.string(), nullable=True),
-            pa.field("source_file", pa.string(), nullable=True),
-            pa.field("ingestion_time", pa.timestamp("us", tz="UTC"), nullable=True),
-        ])
+        schema = pa.schema(
+            [
+                pa.field("tile_id", pa.string(), nullable=False),
+                pa.field("band", pa.string(), nullable=False),
+                pa.field("year_month", pa.string(), nullable=False),
+                pa.field("time", pa.timestamp("us", tz="UTC"), nullable=False),
+                pa.field(
+                    "pixels",
+                    pa.list_(pa.field("element", pa.int32(), nullable=False)),
+                    nullable=False,
+                ),
+                pa.field(
+                    "mask",
+                    pa.list_(pa.field("element", pa.bool_(), nullable=False)),
+                    nullable=False,
+                ),
+                pa.field("product_id", pa.string(), nullable=False),
+                pa.field("resolution", pa.float32(), nullable=False),
+                pa.field("bounds_wkb", pa.binary(), nullable=True),
+                pa.field("num_pixels", pa.int32(), nullable=False),
+                pa.field("min_value", pa.float32(), nullable=True),
+                pa.field("max_value", pa.float32(), nullable=True),
+                pa.field("mean_value", pa.float32(), nullable=True),
+                pa.field("cloud_cover", pa.float32(), nullable=True),
+                pa.field("crs", pa.string(), nullable=True),
+                pa.field("transform", pa.string(), nullable=True),
+                pa.field("source_file", pa.string(), nullable=True),
+                pa.field("ingestion_time", pa.timestamp("us", tz="UTC"), nullable=True),
+            ]
+        )
 
         arrays = [
             pa.array(tile_ids, type=pa.string()),
@@ -301,11 +311,11 @@ class IcebergPixelWriter:
 
         return pa.Table.from_arrays(arrays, schema=schema)
 
-    def get_snapshot_history(self) -> List[Dict[str, Any]]:
+    def get_snapshot_history(self) -> list[dict[str, Any]]:
         """Get snapshot history for Time Travel."""
         return self.storage.get_snapshot_history()
 
-    def get_current_snapshot_id(self) -> Optional[int]:
+    def get_current_snapshot_id(self) -> int | None:
         """Get the current snapshot ID."""
         return self.storage.get_current_snapshot_id()
 

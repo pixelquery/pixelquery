@@ -1,0 +1,105 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/ruff-action@v3
+        with:
+          args: check
+      - uses: astral-sh/ruff-action@v3
+        with:
+          args: format --check
+
+  test:
+    name: Test (Python ${{ matrix.python-version }}, ${{ matrix.os }})
+    needs: lint
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-${{ matrix.python-version }}-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[icechunk,legacy,dev]"
+
+      - name: Run tests
+        run: |
+          pytest tests/ \
+            --cov=pixelquery \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            -x -q
+
+      - name: Upload coverage
+        if: matrix.python-version == '3.12' && matrix.os == 'ubuntu-latest'
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  type-check:
+    name: Type Check
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: |
+          pip install --upgrade pip
+          pip install -e ".[icechunk,dev]"
+      - run: mypy pixelquery/ --ignore-missing-imports
+
+  build:
+    name: Build Package
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install build
+      - run: python -m build
+      - name: Check dist
+        run: |
+          pip install twine
+          twine check dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/

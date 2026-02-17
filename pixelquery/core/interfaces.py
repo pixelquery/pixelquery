@@ -19,8 +19,8 @@ Other protocols have been moved to their respective modules:
 - core/exceptions.py: All exceptions
 """
 
-from typing import Protocol, List, Tuple, Optional, Dict, Any
 from datetime import datetime
+from typing import Any, Protocol
 
 from pixelquery.core.result import QueryResult
 
@@ -34,12 +34,8 @@ class PixelQuery(Protocol):
     """
 
     def add_image(
-        self,
-        image_path: str,
-        acquisition_date: datetime,
-        product_id: str,
-        **metadata: Any
-    ) -> Dict[str, Any]:
+        self, image_path: str, acquisition_date: datetime, product_id: str, **metadata: Any
+    ) -> dict[str, Any]:
         """
         Ingest satellite image with ACID guarantees
 
@@ -66,11 +62,11 @@ class PixelQuery(Protocol):
 
     def query_by_bounds(
         self,
-        bounds: Tuple[float, float, float, float],
-        date_range: Tuple[datetime, datetime],
-        bands: List[str],
+        bounds: tuple[float, float, float, float],
+        date_range: tuple[datetime, datetime],
+        bands: list[str],
         target_resolution: float = 10.0,
-        as_of_snapshot_id: Optional[int] = None
+        as_of_snapshot_id: int | None = None,
     ) -> QueryResult:
         """
         Query multi-resolution time-series data
@@ -109,9 +105,9 @@ class PixelQuery(Protocol):
     def query_time_series(
         self,
         tile_id: str,
-        date_range: Tuple[datetime, datetime],
-        bands: List[str],
-        target_resolution: float = 10.0
+        date_range: tuple[datetime, datetime],
+        bands: list[str],
+        target_resolution: float = 10.0,
     ) -> QueryResult:
         """
         Optimized time-series query for a single tile

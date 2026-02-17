@@ -4,19 +4,18 @@ TileGrid Implementation
 Implements the geographic tile grid system for multi-resolution satellite data.
 """
 
-from typing import Tuple
 import math
 
 
 class FixedTileGrid:
     """
-    Fixed geographic tile grid (2.56km × 2.56km)
+    Fixed geographic tile grid (2.56km x 2.56km)
 
-    Each tile has a fixed geographic size (2.56km × 2.56km) but contains
+    Each tile has a fixed geographic size (2.56km x 2.56km) but contains
     different pixel counts depending on sensor resolution:
-    - Sentinel-2 @ 10m: 256×256 pixels
-    - Landsat-8 @ 30m: 85×85 pixels
-    - Planet @ 3m: 853×853 pixels
+    - Sentinel-2 @ 10m: 256x256 pixels
+    - Landsat-8 @ 30m: 85x85 pixels
+    - Planet @ 3m: 853x853 pixels
 
     Tile IDs are in format "xNNNN_yNNNN" where:
     - x increases eastward from origin
@@ -78,13 +77,13 @@ class FixedTileGrid:
         y_m = self._lat_to_meters(lat)
 
         # Calculate tile indices
-        x_idx = int(math.floor(x_m / self.tile_size_m))
-        y_idx = int(math.floor(y_m / self.tile_size_m))
+        x_idx = math.floor(x_m / self.tile_size_m)
+        y_idx = math.floor(y_m / self.tile_size_m)
 
         # Format tile ID with sign handling
         return self._format_tile_id(x_idx, y_idx)
 
-    def get_tile_bounds(self, tile_id: str) -> Tuple[float, float, float, float]:
+    def get_tile_bounds(self, tile_id: str) -> tuple[float, float, float, float]:
         """
         Get geographic bounds of a tile
 
@@ -142,9 +141,9 @@ class FixedTileGrid:
         if resolution_m <= 0:
             raise ValueError(f"Resolution must be positive, got {resolution_m}")
 
-        return int(math.ceil(self.tile_size_m / resolution_m))
+        return math.ceil(self.tile_size_m / resolution_m)
 
-    def get_tiles_in_bounds(self, bounds: Tuple[float, float, float, float]) -> list:
+    def get_tiles_in_bounds(self, bounds: tuple[float, float, float, float]) -> list:
         """
         Get all tiles that intersect with the given bounds
 
@@ -167,7 +166,7 @@ class FixedTileGrid:
             self.get_tile_id(minx, miny),
             self.get_tile_id(minx, maxy),
             self.get_tile_id(maxx, miny),
-            self.get_tile_id(maxx, maxy)
+            self.get_tile_id(maxx, maxy),
         ]
 
         # Parse indices from all corners
@@ -191,8 +190,12 @@ class FixedTileGrid:
                 tile_minx, tile_miny, tile_maxx, tile_maxy = self.get_tile_bounds(tile_id)
 
                 # Tiles intersect if they overlap in both dimensions
-                if (tile_minx <= maxx and tile_maxx >= minx and
-                    tile_miny <= maxy and tile_maxy >= miny):
+                if (
+                    tile_minx <= maxx
+                    and tile_maxx >= minx
+                    and tile_miny <= maxy
+                    and tile_maxy >= miny
+                ):
                     tiles.append(tile_id)
 
         return tiles
@@ -234,17 +237,17 @@ class FixedTileGrid:
         y_str = f"y{y_idx:04d}" if y_idx >= 0 else f"y{y_idx:05d}"
         return f"{x_str}_{y_str}"
 
-    def _parse_tile_id(self, tile_id: str) -> Tuple[int, int]:
+    def _parse_tile_id(self, tile_id: str) -> tuple[int, int]:
         """Parse tile ID string into x, y indices"""
         try:
-            parts = tile_id.split('_')
+            parts = tile_id.split("_")
             if len(parts) != 2:
                 raise ValueError(f"Invalid tile ID format: {tile_id}")
 
             x_str = parts[0]
             y_str = parts[1]
 
-            if not x_str.startswith('x') or not y_str.startswith('y'):
+            if not x_str.startswith("x") or not y_str.startswith("y"):
                 raise ValueError(f"Invalid tile ID format: {tile_id}")
 
             x_idx = int(x_str[1:])
@@ -252,4 +255,4 @@ class FixedTileGrid:
 
             return (x_idx, y_idx)
         except (ValueError, IndexError) as e:
-            raise ValueError(f"Invalid tile ID '{tile_id}': {e}")
+            raise ValueError(f"Invalid tile ID '{tile_id}': {e}") from e

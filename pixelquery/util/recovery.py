@@ -9,10 +9,9 @@ Features:
 - Storage statistics
 """
 
-from typing import Optional, List, Dict, Any
-from pathlib import Path
-from datetime import datetime, timezone
 import logging
+from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +43,7 @@ class RecoveryTool:
         """Initialize recovery tool"""
         self.warehouse_path = Path(warehouse_path)
 
-    def diagnose(self) -> Dict[str, Any]:
+    def diagnose(self) -> dict[str, Any]:
         """Diagnose warehouse for issues"""
         issues = {
             "orphaned_temp_files": [],
@@ -100,6 +99,7 @@ class RecoveryTool:
 
             try:
                 from pixelquery._internal.storage.iceberg_storage import IcebergStorageManager
+
                 storage = IcebergStorageManager(str(self.warehouse_path))
                 storage.initialize()
                 snapshots = storage.get_snapshot_history()
@@ -125,7 +125,7 @@ class RecoveryTool:
         self,
         cleanup_temp: bool = True,
         cleanup_orphaned_data: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Repair warehouse issues"""
         results = {
             "temp_files_removed": 0,
@@ -149,7 +149,7 @@ class RecoveryTool:
 
         return results
 
-    def get_retry_info(self) -> Dict[str, Any]:
+    def get_retry_info(self) -> dict[str, Any]:
         """Get information about operations that can be retried"""
         info = {
             "note": "Iceberg provides automatic rollback for failed operations",
@@ -174,7 +174,7 @@ class RecoveryTool:
 
         return info
 
-    def verify_integrity(self) -> Dict[str, Any]:
+    def verify_integrity(self) -> dict[str, Any]:
         """Verify warehouse integrity"""
         results = {
             "status": "healthy",
@@ -196,10 +196,13 @@ class RecoveryTool:
 
             try:
                 from pixelquery._internal.storage.iceberg_storage import IcebergStorageManager
+
                 storage = IcebergStorageManager(str(self.warehouse_path))
                 storage.initialize()
                 stats = storage.get_table_stats()
-                results["checks"].append(f"Iceberg table readable ({stats['total_snapshots']} snapshots)")
+                results["checks"].append(
+                    f"Iceberg table readable ({stats['total_snapshots']} snapshots)"
+                )
             except Exception as e:
                 results["status"] = "error"
                 results["errors"].append(f"Cannot read Iceberg table: {e}")
@@ -209,6 +212,7 @@ class RecoveryTool:
 
             try:
                 from pixelquery._internal.storage.geoparquet import GeoParquetReader
+
                 reader = GeoParquetReader()
                 metadata = reader.read_metadata(str(arrow_metadata))
                 results["checks"].append(f"GeoParquet metadata readable ({len(metadata)} records)")

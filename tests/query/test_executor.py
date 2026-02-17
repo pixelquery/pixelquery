@@ -2,18 +2,19 @@
 Tests for QueryExecutor
 """
 
-import pytest
-import tempfile
 import shutil
-from pathlib import Path
+import tempfile
 from datetime import datetime
-import numpy as np
+from pathlib import Path
 
-from pixelquery.query import QueryExecutor
-from pixelquery.catalog import LocalCatalog
-from pixelquery._internal.storage.geoparquet import TileMetadata
+import numpy as np
+import pytest
+
 from pixelquery._internal.storage.arrow_chunk import ArrowChunkWriter
+from pixelquery._internal.storage.geoparquet import TileMetadata
+from pixelquery.catalog import LocalCatalog
 from pixelquery.core.dataset import Dataset
+from pixelquery.query import QueryExecutor
 
 
 class TestQueryExecutor:
@@ -45,7 +46,7 @@ class TestQueryExecutor:
                 cloud_cover=0.1,
                 product_id="sentinel2_l2a",
                 resolution=10.0,
-                chunk_path="tiles/x0024_y0041/2024-01/red.arrow"
+                chunk_path="tiles/x0024_y0041/2024-01/red.arrow",
             ),
             TileMetadata(
                 tile_id="x0024_y0041",
@@ -59,8 +60,8 @@ class TestQueryExecutor:
                 cloud_cover=0.1,
                 product_id="sentinel2_l2a",
                 resolution=10.0,
-                chunk_path="tiles/x0024_y0041/2024-01/nir.arrow"
-            )
+                chunk_path="tiles/x0024_y0041/2024-01/nir.arrow",
+            ),
         ]
 
         catalog.add_tile_metadata_batch(metadata_list)
@@ -73,9 +74,9 @@ class TestQueryExecutor:
 
             # Create dummy data
             data = {
-                'time': [datetime(2024, 1, i+1) for i in range(10)],
-                'pixels': [np.array([i] * 100, dtype=np.uint16) for i in range(10)],
-                'mask': [np.array([True] * 100) for i in range(10)]
+                "time": [datetime(2024, 1, i + 1) for i in range(10)],
+                "pixels": [np.array([i] * 100, dtype=np.uint16) for i in range(10)],
+                "mask": [np.array([True] * 100) for i in range(10)],
             }
 
             chunk_writer.write_chunk(
@@ -83,7 +84,7 @@ class TestQueryExecutor:
                 data,
                 product_id=metadata.product_id,
                 resolution=metadata.resolution,
-                metadata={'band': metadata.band}
+                metadata={"band": metadata.band},
             )
 
         return catalog
@@ -101,10 +102,7 @@ class TestQueryExecutor:
 
     def test_load_tile(self, executor):
         """Test loading a single tile"""
-        dataset = executor.load_tile(
-            tile_id="x0024_y0041",
-            bands=["red", "nir"]
-        )
+        dataset = executor.load_tile(tile_id="x0024_y0041", bands=["red", "nir"])
 
         assert isinstance(dataset, Dataset)
         assert dataset.tile_id == "x0024_y0041"
@@ -117,7 +115,7 @@ class TestQueryExecutor:
         dataset = executor.load_tile(
             tile_id="x0024_y0041",
             time_range=(datetime(2024, 1, 1), datetime(2024, 1, 31)),
-            bands=["red"]
+            bands=["red"],
         )
 
         assert isinstance(dataset, Dataset)
@@ -125,19 +123,14 @@ class TestQueryExecutor:
 
     def test_load_tile_auto_bands(self, executor):
         """Test loading tile with automatic band detection"""
-        dataset = executor.load_tile(
-            tile_id="x0024_y0041"
-        )
+        dataset = executor.load_tile(tile_id="x0024_y0041")
 
         assert isinstance(dataset, Dataset)
         assert len(dataset.bands) >= 2  # Should have red and nir
 
     def test_load_tiles(self, executor):
         """Test loading multiple tiles"""
-        datasets = executor.load_tiles(
-            tile_ids=["x0024_y0041"],
-            bands=["red"]
-        )
+        datasets = executor.load_tiles(tile_ids=["x0024_y0041"], bands=["red"])
 
         assert isinstance(datasets, dict)
         assert "x0024_y0041" in datasets
@@ -145,20 +138,14 @@ class TestQueryExecutor:
 
     def test_query_by_bounds(self, executor):
         """Test querying by spatial bounds"""
-        datasets = executor.query_by_bounds(
-            bounds=(126.5, 37.0, 127.5, 38.0),
-            bands=["red"]
-        )
+        datasets = executor.query_by_bounds(bounds=(126.5, 37.0, 127.5, 38.0), bands=["red"])
 
         assert isinstance(datasets, dict)
         assert len(datasets) >= 1
 
     def test_query_by_bounds_no_match(self, executor):
         """Test querying with bounds that don't match any tiles"""
-        datasets = executor.query_by_bounds(
-            bounds=(0.0, 0.0, 1.0, 1.0),
-            bands=["red"]
-        )
+        datasets = executor.query_by_bounds(bounds=(0.0, 0.0, 1.0, 1.0), bands=["red"])
 
         assert isinstance(datasets, dict)
         assert len(datasets) == 0
@@ -172,9 +159,7 @@ class TestQueryExecutor:
 
     def test_get_available_tiles_with_bounds(self, executor):
         """Test getting available tiles filtered by bounds"""
-        tiles = executor.get_available_tiles(
-            bounds=(126.5, 37.0, 127.5, 38.0)
-        )
+        tiles = executor.get_available_tiles(bounds=(126.5, 37.0, 127.5, 38.0))
 
         assert isinstance(tiles, list)
         assert "x0024_y0041" in tiles
@@ -184,10 +169,10 @@ class TestQueryExecutor:
         stats = executor.get_tile_statistics("x0024_y0041", "red")
 
         assert isinstance(stats, dict)
-        assert 'min' in stats
-        assert 'max' in stats
-        assert 'mean' in stats
-        assert 'cloud_cover' in stats
+        assert "min" in stats
+        assert "max" in stats
+        assert "mean" in stats
+        assert "cloud_cover" in stats
 
     def test_repr(self, executor):
         """Test string representation"""
@@ -231,7 +216,7 @@ class TestQueryExecutorIntegration:
                         cloud_cover=0.1,
                         product_id="sentinel2_l2a",
                         resolution=10.0,
-                        chunk_path=f"tiles/{tile_id}/2024-{month:02d}/{band}.arrow"
+                        chunk_path=f"tiles/{tile_id}/2024-{month:02d}/{band}.arrow",
                     )
                     metadata_list.append(metadata)
 
@@ -240,9 +225,9 @@ class TestQueryExecutorIntegration:
                     chunk_path.parent.mkdir(parents=True, exist_ok=True)
 
                     data = {
-                        'time': [datetime(2024, month, i+1) for i in range(5)],
-                        'pixels': [np.array([i] * 100, dtype=np.uint16) for i in range(5)],
-                        'mask': [np.array([True] * 100) for i in range(5)]
+                        "time": [datetime(2024, month, i + 1) for i in range(5)],
+                        "pixels": [np.array([i] * 100, dtype=np.uint16) for i in range(5)],
+                        "mask": [np.array([True] * 100) for i in range(5)],
                     }
 
                     chunk_writer.write_chunk(
@@ -250,7 +235,7 @@ class TestQueryExecutorIntegration:
                         data,
                         product_id=metadata.product_id,
                         resolution=metadata.resolution,
-                        metadata={'band': band}
+                        metadata={"band": band},
                     )
 
         catalog.add_tile_metadata_batch(metadata_list)
@@ -268,16 +253,13 @@ class TestQueryExecutorIntegration:
         assert "red" in dataset.data
 
         # Query by bounds
-        datasets = executor.query_by_bounds(
-            bounds=(126.5, 37.0, 127.5, 38.0),
-            bands=["red"]
-        )
+        datasets = executor.query_by_bounds(bounds=(126.5, 37.0, 127.5, 38.0), bands=["red"])
         assert len(datasets) == 2
 
         # Get statistics
         stats = executor.get_tile_statistics("x0024_y0041", "red")
-        assert stats['min'] == 100.0
-        assert stats['max'] == 5000.0
+        assert stats["min"] == 100.0
+        assert stats["max"] == 5000.0
 
     def test_time_range_filtering(self, temp_warehouse):
         """Test time range filtering"""
@@ -300,7 +282,7 @@ class TestQueryExecutorIntegration:
                 cloud_cover=0.1,
                 product_id="sentinel2_l2a",
                 resolution=10.0,
-                chunk_path=f"tiles/x0024_y0041/2024-{month:02d}/red.arrow"
+                chunk_path=f"tiles/x0024_y0041/2024-{month:02d}/red.arrow",
             )
             metadata_list.append(metadata)
 
@@ -309,9 +291,9 @@ class TestQueryExecutorIntegration:
             chunk_path.parent.mkdir(parents=True, exist_ok=True)
 
             data = {
-                'time': [datetime(2024, month, i+1) for i in range(5)],
-                'pixels': [np.array([i] * 100, dtype=np.uint16) for i in range(5)],
-                'mask': [np.array([True] * 100) for i in range(5)]
+                "time": [datetime(2024, month, i + 1) for i in range(5)],
+                "pixels": [np.array([i] * 100, dtype=np.uint16) for i in range(5)],
+                "mask": [np.array([True] * 100) for i in range(5)],
             }
 
             chunk_writer.write_chunk(
@@ -319,7 +301,7 @@ class TestQueryExecutorIntegration:
                 data,
                 product_id=metadata.product_id,
                 resolution=metadata.resolution,
-                metadata={'band': 'red'}
+                metadata={"band": "red"},
             )
 
         catalog.add_tile_metadata_batch(metadata_list)
@@ -330,7 +312,7 @@ class TestQueryExecutorIntegration:
         dataset = executor.load_tile(
             tile_id="x0024_y0041",
             time_range=(datetime(2024, 1, 1), datetime(2024, 3, 31)),
-            bands=["red"]
+            bands=["red"],
         )
 
         assert isinstance(dataset, Dataset)

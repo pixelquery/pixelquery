@@ -5,8 +5,8 @@ Migrates Arrow IPC storage to Apache Iceberg.
 """
 
 import argparse
-from pathlib import Path
 import sys
+from pathlib import Path
 
 
 def run_migrate(args: argparse.Namespace) -> None:
@@ -19,10 +19,7 @@ def run_migrate(args: argparse.Namespace) -> None:
 
     from pixelquery.util.migrate import MigrationTool
 
-    tool = MigrationTool(
-        str(warehouse_path),
-        backup=not args.no_backup
-    )
+    tool = MigrationTool(str(warehouse_path), backup=not args.no_backup)
 
     status = tool.check_migration_needed()
 
@@ -55,7 +52,7 @@ def run_migrate(args: argparse.Namespace) -> None:
 
         try:
             response = input("\nProceed with migration? [y/N] ")
-            if response.lower() != 'y':
+            if response.lower() != "y":
                 print("Migration cancelled.")
                 return
         except (EOFError, KeyboardInterrupt):
@@ -65,8 +62,8 @@ def run_migrate(args: argparse.Namespace) -> None:
     def progress_callback(percent: float) -> None:
         bar_width = 40
         filled = int(bar_width * percent / 100)
-        bar = '=' * filled + '-' * (bar_width - filled)
-        print(f"\rMigrating: [{bar}] {percent:.1f}%", end='', flush=True)
+        bar = "=" * filled + "-" * (bar_width - filled)
+        print(f"\rMigrating: [{bar}] {percent:.1f}%", end="", flush=True)
 
     print()
 
@@ -84,22 +81,22 @@ def run_migrate(args: argparse.Namespace) -> None:
     print(f"  Records migrated: {result['records_migrated']:,}")
     print(f"  Arrow files processed: {result['arrow_files_processed']}")
 
-    if result.get('verification'):
-        v = result['verification']
-        if 'dry_run' not in v:
+    if result.get("verification"):
+        v = result["verification"]
+        if "dry_run" not in v:
             print()
             print("Verification:")
             print(f"  Iceberg records: {v.get('iceberg_total_records', 'N/A')}")
             print(f"  Chunks match: {v.get('match', 'N/A')}")
 
-    if result.get('backup_path'):
+    if result.get("backup_path"):
         print()
         print(f"Backup created at: {result['backup_path']}")
 
-    if result.get('errors'):
+    if result.get("errors"):
         print()
         print("Errors:")
-        for err in result['errors'][:5]:
+        for err in result["errors"][:5]:
             print(f"  - {err}")
-        if len(result['errors']) > 5:
+        if len(result["errors"]) > 5:
             print(f"  ... and {len(result['errors']) - 5} more")

@@ -2,14 +2,15 @@
 Tests for LocalCatalog
 """
 
-import pytest
-import tempfile
 import shutil
-from pathlib import Path
+import tempfile
 from datetime import datetime
+from pathlib import Path
 
-from pixelquery.catalog import LocalCatalog
+import pytest
+
 from pixelquery._internal.storage.geoparquet import TileMetadata
+from pixelquery.catalog import LocalCatalog
 
 
 class TestLocalCatalog:
@@ -42,7 +43,7 @@ class TestLocalCatalog:
             cloud_cover=0.1,
             product_id="sentinel2_l2a",
             resolution=10.0,
-            chunk_path="tiles/x0024_y0041/2024-01/red.arrow"
+            chunk_path="tiles/x0024_y0041/2024-01/red.arrow",
         )
 
     def test_init(self, catalog, temp_warehouse):
@@ -76,7 +77,7 @@ class TestLocalCatalog:
                 cloud_cover=0.1,
                 product_id="sentinel2_l2a",
                 resolution=10.0,
-                chunk_path=f"tiles/x{i:04d}_y0041/2024-01/red.arrow"
+                chunk_path=f"tiles/x{i:04d}_y0041/2024-01/red.arrow",
             )
             for i in range(3)
         ]
@@ -106,7 +107,7 @@ class TestLocalCatalog:
                 cloud_cover=0.1,
                 product_id="sentinel2_l2a",
                 resolution=10.0,
-                chunk_path=f"tiles/x{i:04d}_y0041/2024-01/red.arrow"
+                chunk_path=f"tiles/x{i:04d}_y0041/2024-01/red.arrow",
             )
             for i in range(3)
         ]
@@ -134,7 +135,7 @@ class TestLocalCatalog:
                 cloud_cover=0.1,
                 product_id="sentinel2_l2a",
                 resolution=10.0,
-                chunk_path="tiles/x0000_y0041/2024-01/red.arrow"
+                chunk_path="tiles/x0000_y0041/2024-01/red.arrow",
             ),
             TileMetadata(
                 tile_id="x0001_y0041",
@@ -148,8 +149,8 @@ class TestLocalCatalog:
                 cloud_cover=0.1,
                 product_id="sentinel2_l2a",
                 resolution=10.0,
-                chunk_path="tiles/x0001_y0041/2024-01/red.arrow"
-            )
+                chunk_path="tiles/x0001_y0041/2024-01/red.arrow",
+            ),
         ]
 
         catalog.add_tile_metadata_batch(metadata_list)
@@ -179,7 +180,7 @@ class TestLocalCatalog:
                 cloud_cover=0.1,
                 product_id="sentinel2_l2a",
                 resolution=10.0,
-                chunk_path=f"tiles/x0024_y0041/2024-01/{band}.arrow"
+                chunk_path=f"tiles/x0024_y0041/2024-01/{band}.arrow",
             )
             for band in ["red", "green", "blue", "nir"]
         ]
@@ -206,7 +207,7 @@ class TestLocalCatalog:
                 cloud_cover=0.1,
                 product_id="sentinel2_l2a",
                 resolution=10.0,
-                chunk_path="tiles/x0024_y0041/2024-01/red.arrow"
+                chunk_path="tiles/x0024_y0041/2024-01/red.arrow",
             ),
             TileMetadata(
                 tile_id="x0025_y0041",
@@ -220,8 +221,8 @@ class TestLocalCatalog:
                 cloud_cover=0.1,
                 product_id="sentinel2_l2a",
                 resolution=10.0,
-                chunk_path="tiles/x0025_y0041/2024-01/nir.arrow"
-            )
+                chunk_path="tiles/x0025_y0041/2024-01/nir.arrow",
+            ),
         ]
 
         catalog.add_tile_metadata_batch(metadata_list)
@@ -260,7 +261,7 @@ class TestLocalCatalog:
                 cloud_cover=0.1,
                 product_id="sentinel2_l2a",
                 resolution=10.0,
-                chunk_path=f"tiles/x0024_y0041/2024-01/{band}.arrow"
+                chunk_path=f"tiles/x0024_y0041/2024-01/{band}.arrow",
             )
             for band in ["red", "nir"]
         ]
@@ -303,7 +304,7 @@ class TestLocalCatalog:
                 cloud_cover=0.1,
                 product_id="sentinel2_l2a",
                 resolution=10.0,
-                chunk_path=f"tiles/x0024_y0041/2024-{month:02d}/red.arrow"
+                chunk_path=f"tiles/x0024_y0041/2024-{month:02d}/red.arrow",
             )
             for month in range(1, 4)
         ]
@@ -312,10 +313,10 @@ class TestLocalCatalog:
 
         stats = catalog.get_statistics("x0024_y0041", "red")
 
-        assert stats['min'] == 110.0  # min of all months
-        assert stats['max'] == 5030.0  # max of all months
-        assert 'mean' in stats
-        assert 'cloud_cover' in stats
+        assert stats["min"] == 110.0  # min of all months
+        assert stats["max"] == 5030.0  # max of all months
+        assert "mean" in stats
+        assert "cloud_cover" in stats
 
     def test_repr(self, catalog):
         """Test string representation"""
@@ -357,7 +358,7 @@ class TestLocalCatalogIntegration:
                             cloud_cover=0.1,
                             product_id="sentinel2_l2a",
                             resolution=10.0,
-                            chunk_path=f"tiles/{tile_id}/2024-{month:02d}/{band}.arrow"
+                            chunk_path=f"tiles/{tile_id}/2024-{month:02d}/{band}.arrow",
                         )
                     )
 
@@ -377,5 +378,5 @@ class TestLocalCatalogIntegration:
 
         # Get statistics
         stats = catalog.get_statistics("x0024_y0041", "red")
-        assert 'min' in stats
-        assert 'max' in stats
+        assert "min" in stats
+        assert "max" in stats

@@ -2,16 +2,13 @@
 Tests for GeoParquet tile metadata storage
 """
 
-import pytest
-import tempfile
 import shutil
+import tempfile
 from pathlib import Path
 
-from pixelquery._internal.storage.geoparquet import (
-    TileMetadata,
-    GeoParquetWriter,
-    GeoParquetReader
-)
+import pytest
+
+from pixelquery._internal.storage.geoparquet import GeoParquetReader, GeoParquetWriter, TileMetadata
 
 
 class TestTileMetadata:
@@ -31,7 +28,7 @@ class TestTileMetadata:
             cloud_cover=5.0,
             product_id="sentinel2_l2a",
             resolution=10.0,
-            chunk_path="data/x0024_y0041/2024-01/red.arrow"
+            chunk_path="data/x0024_y0041/2024-01/red.arrow",
         )
 
         assert meta.tile_id == "x0024_y0041"
@@ -66,7 +63,7 @@ class TestGeoParquetWriter:
                 cloud_cover=5.0,
                 product_id="sentinel2_l2a",
                 resolution=10.0,
-                chunk_path="data/x0024_y0041/2024-01/red.arrow"
+                chunk_path="data/x0024_y0041/2024-01/red.arrow",
             ),
             TileMetadata(
                 tile_id="x0024_y0041",
@@ -80,8 +77,8 @@ class TestGeoParquetWriter:
                 cloud_cover=5.0,
                 product_id="sentinel2_l2a",
                 resolution=10.0,
-                chunk_path="data/x0024_y0041/2024-01/nir.arrow"
-            )
+                chunk_path="data/x0024_y0041/2024-01/nir.arrow",
+            ),
         ]
 
     @pytest.fixture
@@ -97,7 +94,7 @@ class TestGeoParquetWriter:
         """Test basic metadata writing"""
         path = str(Path(temp_dir) / "tiles.parquet")
 
-        writer.write_metadata(sample_metadata, path, mode='overwrite')
+        writer.write_metadata(sample_metadata, path, mode="overwrite")
 
         assert Path(path).exists()
         assert Path(path).stat().st_size > 0
@@ -106,7 +103,7 @@ class TestGeoParquetWriter:
         """Test that writer creates parent directories"""
         path = str(Path(temp_dir) / "nested" / "path" / "tiles.parquet")
 
-        writer.write_metadata(sample_metadata, path, mode='overwrite')
+        writer.write_metadata(sample_metadata, path, mode="overwrite")
 
         assert Path(path).exists()
 
@@ -122,17 +119,17 @@ class TestGeoParquetWriter:
         path = str(Path(temp_dir) / "tiles.parquet")
 
         with pytest.raises(ValueError, match="Invalid mode"):
-            writer.write_metadata(sample_metadata, path, mode='invalid')
+            writer.write_metadata(sample_metadata, path, mode="invalid")
 
     def test_write_metadata_append(self, writer, temp_dir, sample_metadata):
         """Test append mode"""
         path = str(Path(temp_dir) / "tiles.parquet")
 
         # Write initial data
-        writer.write_metadata([sample_metadata[0]], path, mode='overwrite')
+        writer.write_metadata([sample_metadata[0]], path, mode="overwrite")
 
         # Append more data
-        writer.write_metadata([sample_metadata[1]], path, mode='append')
+        writer.write_metadata([sample_metadata[1]], path, mode="append")
 
         # Verify both entries exist
         reader = GeoParquetReader()
@@ -169,7 +166,7 @@ class TestGeoParquetReader:
                 cloud_cover=5.0,
                 product_id="sentinel2_l2a",
                 resolution=10.0,
-                chunk_path="data/x0024_y0041/2024-01/red.arrow"
+                chunk_path="data/x0024_y0041/2024-01/red.arrow",
             ),
             TileMetadata(
                 tile_id="x0024_y0041",
@@ -183,7 +180,7 @@ class TestGeoParquetReader:
                 cloud_cover=10.0,
                 product_id="sentinel2_l2a",
                 resolution=10.0,
-                chunk_path="data/x0024_y0041/2024-02/red.arrow"
+                chunk_path="data/x0024_y0041/2024-02/red.arrow",
             ),
             TileMetadata(
                 tile_id="x0025_y0041",
@@ -197,11 +194,11 @@ class TestGeoParquetReader:
                 cloud_cover=8.0,
                 product_id="sentinel2_l2a",
                 resolution=10.0,
-                chunk_path="data/x0025_y0041/2024-01/red.arrow"
-            )
+                chunk_path="data/x0025_y0041/2024-01/red.arrow",
+            ),
         ]
 
-        writer.write_metadata(metadata_list, path, mode='overwrite')
+        writer.write_metadata(metadata_list, path, mode="overwrite")
         return path
 
     @pytest.fixture
@@ -253,10 +250,7 @@ class TestGeoParquetReader:
     def test_query_by_bounds(self, reader, sample_file):
         """Test spatial query by bounds"""
         # Query bounds that cover first two tiles
-        metadata_list = reader.query_by_bounds(
-            sample_file,
-            bounds=(127.0, 37.5, 127.08, 37.6)
-        )
+        metadata_list = reader.query_by_bounds(sample_file, bounds=(127.0, 37.5, 127.08, 37.6))
 
         # Should get tiles x0024_y0041 and x0025_y0041
         assert len(metadata_list) >= 2
@@ -264,10 +258,7 @@ class TestGeoParquetReader:
     def test_query_by_bounds_no_match(self, reader, sample_file):
         """Test spatial query with no matches"""
         # Query bounds far away
-        metadata_list = reader.query_by_bounds(
-            sample_file,
-            bounds=(0.0, 0.0, 0.1, 0.1)
-        )
+        metadata_list = reader.query_by_bounds(sample_file, bounds=(0.0, 0.0, 0.1, 0.1))
 
         assert len(metadata_list) == 0
 
@@ -275,9 +266,7 @@ class TestGeoParquetReader:
         """Test query by tile ID and time"""
         # Query specific tile and month
         metadata_list = reader.query_by_tile_and_time(
-            sample_file,
-            tile_id="x0024_y0041",
-            year_month="2024-01"
+            sample_file, tile_id="x0024_y0041", year_month="2024-01"
         )
 
         assert len(metadata_list) == 1
@@ -287,20 +276,14 @@ class TestGeoParquetReader:
     def test_query_by_tile_only(self, reader, sample_file):
         """Test query by tile ID without time filter"""
         # Query all months for a tile
-        metadata_list = reader.query_by_tile_and_time(
-            sample_file,
-            tile_id="x0024_y0041"
-        )
+        metadata_list = reader.query_by_tile_and_time(sample_file, tile_id="x0024_y0041")
 
         assert len(metadata_list) == 2  # 2024-01 and 2024-02
         assert all(m.tile_id == "x0024_y0041" for m in metadata_list)
 
     def test_query_by_tile_no_match(self, reader, sample_file):
         """Test query with non-existent tile"""
-        metadata_list = reader.query_by_tile_and_time(
-            sample_file,
-            tile_id="x9999_y9999"
-        )
+        metadata_list = reader.query_by_tile_and_time(sample_file, tile_id="x9999_y9999")
 
         assert len(metadata_list) == 0
 
@@ -334,11 +317,11 @@ class TestGeoParquetRoundtrip:
             cloud_cover=5.0,
             product_id="sentinel2_l2a",
             resolution=10.0,
-            chunk_path="data/x0024_y0041/2024-01/red.arrow"
+            chunk_path="data/x0024_y0041/2024-01/red.arrow",
         )
 
         # Write
-        writer.write_metadata([original], path, mode='overwrite')
+        writer.write_metadata([original], path, mode="overwrite")
 
         # Read
         read_metadata = reader.read_metadata(path)
@@ -367,7 +350,7 @@ class TestGeoParquetRoundtrip:
                 tile_id=f"x{i:04d}_y0041",
                 year_month="2024-01",
                 band="red",
-                bounds=(127.0 + i*0.01, 37.5, 127.01 + i*0.01, 37.51),
+                bounds=(127.0 + i * 0.01, 37.5, 127.01 + i * 0.01, 37.51),
                 num_observations=i + 1,
                 min_value=100.0 * i,
                 max_value=10000.0 * i,
@@ -375,12 +358,12 @@ class TestGeoParquetRoundtrip:
                 cloud_cover=float(i),
                 product_id="sentinel2_l2a",
                 resolution=10.0,
-                chunk_path=f"data/x{i:04d}_y0041/2024-01/red.arrow"
+                chunk_path=f"data/x{i:04d}_y0041/2024-01/red.arrow",
             )
             metadata_list.append(meta)
 
         # Write
-        writer.write_metadata(metadata_list, path, mode='overwrite')
+        writer.write_metadata(metadata_list, path, mode="overwrite")
 
         # Read
         read_metadata = reader.read_metadata(path)

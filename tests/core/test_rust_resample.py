@@ -1,11 +1,12 @@
 """Tests for Rust resampling functions"""
 
-import pytest
 import numpy as np
+import pytest
 from scipy.ndimage import zoom
 
 try:
     from pixelquery_core import resample_bilinear, resample_nearest_neighbor
+
     RUST_AVAILABLE = True
 except ImportError:
     RUST_AVAILABLE = False
@@ -190,6 +191,7 @@ class TestFallbackBehavior:
         # This test always passes - just verifies the import detection works
         try:
             from pixelquery_core import resample_bilinear
+
             assert True  # Rust available
         except ImportError:
             assert True  # Rust not available - that's OK for this test

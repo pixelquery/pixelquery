@@ -2,8 +2,10 @@
 Tests for TileGrid implementation
 """
 
-import pytest
 import math
+
+import pytest
+
 from pixelquery.grid.tile_grid import FixedTileGrid
 
 
@@ -133,7 +135,7 @@ class TestFixedTileGrid:
             (127.05, 37.55),
             (-122.42, 37.77),
             (139.69, 35.68),  # Tokyo
-            (2.35, 48.86),    # Paris
+            (2.35, 48.86),  # Paris
         ]
 
         for lon, lat in test_points:
@@ -149,8 +151,8 @@ class TestFixedTileGrid:
         tile_id_1 = "x0000_y0000"
         tile_id_2 = "x0001_y0000"  # Adjacent to the right
 
-        minx1, miny1, maxx1, maxy1 = grid.get_tile_bounds(tile_id_1)
-        minx2, miny2, maxx2, maxy2 = grid.get_tile_bounds(tile_id_2)
+        _minx1, _miny1, maxx1, _maxy1 = grid.get_tile_bounds(tile_id_1)
+        minx2, _miny2, _maxx2, _maxy2 = grid.get_tile_bounds(tile_id_2)
 
         # Adjacent tiles should share a boundary (maxx1 == minx2)
         assert abs(maxx1 - minx2) < 1e-10, "Adjacent tiles should share boundary"
@@ -190,12 +192,7 @@ class TestFixedTileGrid:
         minx, miny, maxx, maxy = grid.get_tile_bounds("x0000_y0000")
 
         # Query with smaller bounds inside the tile
-        inner_bounds = (
-            minx + 0.001,
-            miny + 0.001,
-            maxx - 0.001,
-            maxy - 0.001
-        )
+        inner_bounds = (minx + 0.001, miny + 0.001, maxx - 0.001, maxy - 0.001)
 
         tiles = grid.get_tiles_in_bounds(inner_bounds)
         assert len(tiles) == 1
@@ -218,12 +215,7 @@ class TestFixedTileGrid:
         minx, miny, maxx, maxy = grid.get_tile_bounds("x0010_y0020")
 
         # Use slightly smaller bounds to avoid edge cases
-        inner_bounds = (
-            minx + 0.0001,
-            miny + 0.0001,
-            maxx - 0.0001,
-            maxy - 0.0001
-        )
+        inner_bounds = (minx + 0.0001, miny + 0.0001, maxx - 0.0001, maxy - 0.0001)
 
         tiles = grid.get_tiles_in_bounds(inner_bounds)
 
@@ -240,7 +232,7 @@ class TestFixedTileGrid:
         assert len(tiles) >= 1
         # All tiles should have negative x indices
         for tile_id in tiles:
-            x_idx, y_idx = grid._parse_tile_id(tile_id)
+            x_idx, _y_idx = grid._parse_tile_id(tile_id)
             assert x_idx < 0
 
     def test_get_tiles_in_bounds_large_area(self, grid):

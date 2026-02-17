@@ -4,12 +4,11 @@ GeoParquet Tile Metadata Storage
 Implements tile metadata storage using GeoParquet format for spatial indexing.
 """
 
-from typing import Dict, List, Optional, Tuple
-from pathlib import Path
 from dataclasses import dataclass
-import pyarrow as pa
-import pyarrow.parquet as pq
+from pathlib import Path
+
 import geopandas as gpd
+import pandas as pd
 from shapely.geometry import box
 
 
@@ -32,10 +31,11 @@ class TileMetadata:
         resolution: Spatial resolution in meters
         chunk_path: Path to Arrow IPC chunk file
     """
+
     tile_id: str
     year_month: str
     band: str
-    bounds: Tuple[float, float, float, float]
+    bounds: tuple[float, float, float, float]
     num_observations: int
     min_value: float
     max_value: float
@@ -90,10 +90,7 @@ class GeoParquetWriter:
     """
 
     def write_metadata(
-        self,
-        metadata_list: List[TileMetadata],
-        path: str,
-        mode: str = 'append'
+        self, metadata_list: list[TileMetadata], path: str, mode: str = "append"
     ) -> None:
         """
         Write tile metadata to GeoParquet
@@ -111,7 +108,7 @@ class GeoParquetWriter:
             raise ValueError("metadata_list cannot be empty")
 
         # Validate mode
-        if mode not in ('append', 'overwrite'):
+        if mode not in ("append", "overwrite"):
             raise ValueError(f"Invalid mode: {mode}. Must be 'append' or 'overwrite'")
 
         # Convert to GeoDataFrame
@@ -121,13 +118,13 @@ class GeoParquetWriter:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
 
         # Write to GeoParquet
-        if mode == 'overwrite' or not Path(path).exists():
-            gdf.to_parquet(path, compression='zstd', index=False)
-        elif mode == 'append':
+        if mode == "overwrite" or not Path(path).exists():
+            gdf.to_parquet(path, compression="zstd", index=False)
+        elif mode == "append":
             # Append to existing file
             self._append_to_parquet(gdf, path)
 
-    def _create_geodataframe(self, metadata_list: List[TileMetadata]) -> gpd.GeoDataFrame:
+    def _create_geodataframe(self, metadata_list: list[TileMetadata]) -> gpd.GeoDataFrame:
         """Convert metadata list to GeoDataFrame"""
         records = []
         for meta in metadata_list:
@@ -135,23 +132,25 @@ class GeoParquetWriter:
             minx, miny, maxx, maxy = meta.bounds
             geometry = box(minx, miny, maxx, maxy)
 
-            records.append({
-                'tile_id': meta.tile_id,
-                'year_month': meta.year_month,
-                'band': meta.band,
-                'geometry': geometry,
-                'num_observations': meta.num_observations,
-                'min_value': meta.min_value,
-                'max_value': meta.max_value,
-                'mean_value': meta.mean_value,
-                'cloud_cover': meta.cloud_cover,
-                'product_id': meta.product_id,
-                'resolution': meta.resolution,
-                'chunk_path': meta.chunk_path,
-            })
+            records.append(
+                {
+                    "tile_id": meta.tile_id,
+                    "year_month": meta.year_month,
+                    "band": meta.band,
+                    "geometry": geometry,
+                    "num_observations": meta.num_observations,
+                    "min_value": meta.min_value,
+                    "max_value": meta.max_value,
+                    "mean_value": meta.mean_value,
+                    "cloud_cover": meta.cloud_cover,
+                    "product_id": meta.product_id,
+                    "resolution": meta.resolution,
+                    "chunk_path": meta.chunk_path,
+                }
+            )
 
         # Create GeoDataFrame with WGS84 CRS
-        gdf = gpd.GeoDataFrame(records, crs='EPSG:4326')
+        gdf = gpd.GeoDataFrame(records, crs="EPSG:4326")
         return gdf
 
     def _append_to_parquet(self, new_gdf: gpd.GeoDataFrame, path: str) -> None:
@@ -161,12 +160,11 @@ class GeoParquetWriter:
 
         # Concatenate
         combined_gdf = gpd.GeoDataFrame(
-            pd.concat([existing_gdf, new_gdf], ignore_index=True),
-            crs=existing_gdf.crs
+            pd.concat([existing_gdf, new_gdf], ignore_index=True), crs=existing_gdf.crs
         )
 
         # Write back
-        combined_gdf.to_parquet(path, compression='zstd', index=False)
+        combined_gdf.to_parquet(path, compression="zstd", index=False)
 
 
 class GeoParquetReader:
@@ -189,7 +187,7 @@ class GeoParquetReader:
         ... )
     """
 
-    def read_metadata(self, path: str) -> List[TileMetadata]:
+    def read_metadata(self, path: str) -> list[TileMetadata]:
         """
         Read all tile metadata from GeoParquet
 
@@ -212,28 +210,26 @@ class GeoParquetReader:
         metadata_list = []
         for _, row in gdf.iterrows():
             metadata = TileMetadata(
-                tile_id=row['tile_id'],
-                year_month=row['year_month'],
-                band=row['band'],
-                bounds=tuple(row['geometry'].bounds),  # (minx, miny, maxx, maxy)
-                num_observations=int(row['num_observations']),
-                min_value=float(row['min_value']),
-                max_value=float(row['max_value']),
-                mean_value=float(row['mean_value']),
-                cloud_cover=float(row['cloud_cover']),
-                product_id=row['product_id'],
-                resolution=float(row['resolution']),
-                chunk_path=row['chunk_path'],
+                tile_id=row["tile_id"],
+                year_month=row["year_month"],
+                band=row["band"],
+                bounds=tuple(row["geometry"].bounds),  # (minx, miny, maxx, maxy)
+                num_observations=int(row["num_observations"]),
+                min_value=float(row["min_value"]),
+                max_value=float(row["max_value"]),
+                mean_value=float(row["mean_value"]),
+                cloud_cover=float(row["cloud_cover"]),
+                product_id=row["product_id"],
+                resolution=float(row["resolution"]),
+                chunk_path=row["chunk_path"],
             )
             metadata_list.append(metadata)
 
         return metadata_list
 
     def query_by_bounds(
-        self,
-        path: str,
-        bounds: Tuple[float, float, float, float]
-    ) -> List[TileMetadata]:
+        self, path: str, bounds: tuple[float, float, float, float]
+    ) -> list[TileMetadata]:
         """
         Query metadata by spatial bounds
 
@@ -261,29 +257,26 @@ class GeoParquetReader:
         metadata_list = []
         for _, row in gdf_filtered.iterrows():
             metadata = TileMetadata(
-                tile_id=row['tile_id'],
-                year_month=row['year_month'],
-                band=row['band'],
-                bounds=tuple(row['geometry'].bounds),
-                num_observations=int(row['num_observations']),
-                min_value=float(row['min_value']),
-                max_value=float(row['max_value']),
-                mean_value=float(row['mean_value']),
-                cloud_cover=float(row['cloud_cover']),
-                product_id=row['product_id'],
-                resolution=float(row['resolution']),
-                chunk_path=row['chunk_path'],
+                tile_id=row["tile_id"],
+                year_month=row["year_month"],
+                band=row["band"],
+                bounds=tuple(row["geometry"].bounds),
+                num_observations=int(row["num_observations"]),
+                min_value=float(row["min_value"]),
+                max_value=float(row["max_value"]),
+                mean_value=float(row["mean_value"]),
+                cloud_cover=float(row["cloud_cover"]),
+                product_id=row["product_id"],
+                resolution=float(row["resolution"]),
+                chunk_path=row["chunk_path"],
             )
             metadata_list.append(metadata)
 
         return metadata_list
 
     def query_by_tile_and_time(
-        self,
-        path: str,
-        tile_id: str,
-        year_month: Optional[str] = None
-    ) -> List[TileMetadata]:
+        self, path: str, tile_id: str, year_month: str | None = None
+    ) -> list[TileMetadata]:
         """
         Query metadata by tile ID and optional time
 
@@ -302,33 +295,29 @@ class GeoParquetReader:
         gdf = gpd.read_parquet(path)
 
         # Filter by tile_id
-        gdf_filtered = gdf[gdf['tile_id'] == tile_id]
+        gdf_filtered = gdf[gdf["tile_id"] == tile_id]
 
         # Optional time filter
         if year_month:
-            gdf_filtered = gdf_filtered[gdf_filtered['year_month'] == year_month]
+            gdf_filtered = gdf_filtered[gdf_filtered["year_month"] == year_month]
 
         # Convert to TileMetadata
         metadata_list = []
         for _, row in gdf_filtered.iterrows():
             metadata = TileMetadata(
-                tile_id=row['tile_id'],
-                year_month=row['year_month'],
-                band=row['band'],
-                bounds=tuple(row['geometry'].bounds),
-                num_observations=int(row['num_observations']),
-                min_value=float(row['min_value']),
-                max_value=float(row['max_value']),
-                mean_value=float(row['mean_value']),
-                cloud_cover=float(row['cloud_cover']),
-                product_id=row['product_id'],
-                resolution=float(row['resolution']),
-                chunk_path=row['chunk_path'],
+                tile_id=row["tile_id"],
+                year_month=row["year_month"],
+                band=row["band"],
+                bounds=tuple(row["geometry"].bounds),
+                num_observations=int(row["num_observations"]),
+                min_value=float(row["min_value"]),
+                max_value=float(row["max_value"]),
+                mean_value=float(row["mean_value"]),
+                cloud_cover=float(row["cloud_cover"]),
+                product_id=row["product_id"],
+                resolution=float(row["resolution"]),
+                chunk_path=row["chunk_path"],
             )
             metadata_list.append(metadata)
 
         return metadata_list
-
-
-# Import pandas for append operation
-import pandas as pd

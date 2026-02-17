@@ -16,7 +16,7 @@ Iceberg provides built-in:
 - Time Travel via snapshots
 """
 
-from typing import Protocol, Dict, Any, List
+from typing import Any, Protocol
 
 
 class Transaction(Protocol):
@@ -32,12 +32,7 @@ class Transaction(Protocol):
     This ensures metadata (Iceberg) and pixel data (Arrow) stay consistent.
     """
 
-    def stage_arrow_chunk(
-        self,
-        tile_id: str,
-        year_month: str,
-        data: Dict[str, Any]
-    ) -> str:
+    def stage_arrow_chunk(self, tile_id: str, year_month: str, data: dict[str, Any]) -> str:
         """
         Stage Arrow chunk to temporary path
 
@@ -51,7 +46,7 @@ class Transaction(Protocol):
         """
         ...
 
-    def stage_geoparquet_metadata(self, records: List[Dict[str, Any]]) -> str:
+    def stage_geoparquet_metadata(self, records: list[dict[str, Any]]) -> str:
         """
         Stage GeoParquet metadata to temporary path
 
@@ -63,7 +58,7 @@ class Transaction(Protocol):
         """
         ...
 
-    def commit(self) -> Dict[str, Any]:
+    def commit(self) -> dict[str, Any]:
         """
         Commit transaction (Iceberg + finalize files)
 

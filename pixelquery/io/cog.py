@@ -2,10 +2,11 @@
 Cloud-Optimized GeoTIFF (COG) reader using Rasterio
 """
 
-from typing import Dict, Any, Tuple, Optional
+from typing import Any
+
 import numpy as np
-from numpy.typing import NDArray
 import rasterio
+from numpy.typing import NDArray
 from rasterio.warp import transform_bounds
 from rasterio.windows import Window
 
@@ -40,7 +41,7 @@ class COGReader:
             rasterio.errors.RasterioIOError: If file can't be opened
         """
         self.file_path = file_path
-        self.dataset = rasterio.open(file_path, 'r')
+        self.dataset = rasterio.open(file_path, "r")
 
     def read_band(self, band_index: int) -> NDArray:
         """
@@ -60,11 +61,7 @@ class COGReader:
         """
         return self.dataset.read(band_index)
 
-    def read_window(
-        self,
-        window: Window,
-        band_index: int
-    ) -> NDArray:
+    def read_window(self, window: Window, band_index: int) -> NDArray:
         """
         Read specific window from a band
 
@@ -83,7 +80,7 @@ class COGReader:
         """
         return self.dataset.read(band_index, window=window)
 
-    def get_metadata(self) -> Dict[str, Any]:
+    def get_metadata(self) -> dict[str, Any]:
         """
         Extract metadata from COG
 
@@ -105,17 +102,17 @@ class COGReader:
             CRS.from_epsg(32633)
         """
         return {
-            'crs': self.dataset.crs,
-            'transform': self.dataset.transform,
-            'bounds': self.dataset.bounds,
-            'width': self.dataset.width,
-            'height': self.dataset.height,
-            'count': self.dataset.count,
-            'dtype': self.dataset.dtypes[0],
-            'nodata': self.dataset.nodata
+            "crs": self.dataset.crs,
+            "transform": self.dataset.transform,
+            "bounds": self.dataset.bounds,
+            "width": self.dataset.width,
+            "height": self.dataset.height,
+            "count": self.dataset.count,
+            "dtype": self.dataset.dtypes[0],
+            "nodata": self.dataset.nodata,
         }
 
-    def get_bounds(self, target_crs: str = 'EPSG:4326') -> Tuple[float, float, float, float]:
+    def get_bounds(self, target_crs: str = "EPSG:4326") -> tuple[float, float, float, float]:
         """
         Get geographic bounds in target CRS
 
@@ -136,11 +133,7 @@ class COGReader:
             return self.dataset.bounds
 
         # Transform bounds to target CRS
-        bounds = transform_bounds(
-            self.dataset.crs,
-            target_crs,
-            *self.dataset.bounds
-        )
+        bounds = transform_bounds(self.dataset.crs, target_crs, *self.dataset.bounds)
 
         return bounds
 

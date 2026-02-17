@@ -4,7 +4,7 @@ Storage Backend Protocol
 Abstract storage interface for multiple backends (local, S3, Azure, GCS).
 """
 
-from typing import Protocol, List
+from typing import Protocol
 
 
 class StorageBackend(Protocol):
@@ -39,6 +39,6 @@ class StorageBackend(Protocol):
         """Check if file exists"""
         ...
 
-    def list_files(self, prefix: str) -> List[str]:
+    def list_files(self, prefix: str) -> list[str]:
         """List files matching prefix (for discovery)"""
         ...

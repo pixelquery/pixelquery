@@ -5,11 +5,11 @@ Provides the same interface as LocalCatalog but uses Apache Iceberg
 for ACID transactions and Time Travel support.
 """
 
-from typing import List, Optional, Tuple, Dict, Any
-from pathlib import Path
-from datetime import datetime, timezone
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+from typing import Any
 
 from pixelquery._internal.storage.iceberg_storage import IcebergStorageManager
 from pixelquery.io.iceberg_reader import IcebergPixelReader
@@ -24,10 +24,11 @@ class TileMetadata:
 
     Compatible with LocalCatalog's TileMetadata interface.
     """
+
     tile_id: str
     year_month: str
     band: str
-    bounds: Optional[Tuple[float, float, float, float]]  # (minx, miny, maxx, maxy)
+    bounds: tuple[float, float, float, float] | None  # (minx, miny, maxx, maxy)
     num_observations: int
     min_value: float
     max_value: float
@@ -95,11 +96,11 @@ class IcebergCatalog:
 
     def list_tiles(
         self,
-        bounds: Optional[Tuple[float, float, float, float]] = None,
-        time_range: Optional[Tuple[datetime, datetime]] = None,
-        product_id: Optional[str] = None,
-        as_of_snapshot_id: Optional[int] = None,
-    ) -> List[str]:
+        bounds: tuple[float, float, float, float] | None = None,
+        time_range: tuple[datetime, datetime] | None = None,
+        product_id: str | None = None,
+        as_of_snapshot_id: int | None = None,
+    ) -> list[str]:
         """
         List all unique tile IDs in the catalog
 
@@ -164,26 +165,26 @@ class IcebergCatalog:
 
     def _bounds_intersect(
         self,
-        bounds1: Tuple[float, float, float, float],
-        bounds2: Tuple[float, float, float, float],
+        bounds1: tuple[float, float, float, float],
+        bounds2: tuple[float, float, float, float],
     ) -> bool:
         """Check if two bounding boxes intersect."""
         minx1, miny1, maxx1, maxy1 = bounds1
         minx2, miny2, maxx2, maxy2 = bounds2
 
         return not (
-            maxx1 < minx2 or  # bounds1 is left of bounds2
-            minx1 > maxx2 or  # bounds1 is right of bounds2
-            maxy1 < miny2 or  # bounds1 is below bounds2
-            miny1 > maxy2     # bounds1 is above bounds2
+            maxx1 < minx2  # bounds1 is left of bounds2
+            or minx1 > maxx2  # bounds1 is right of bounds2
+            or maxy1 < miny2  # bounds1 is below bounds2
+            or miny1 > maxy2  # bounds1 is above bounds2
         )
 
     def list_bands(
         self,
-        tile_id: Optional[str] = None,
-        product_id: Optional[str] = None,
-        as_of_snapshot_id: Optional[int] = None,
-    ) -> List[str]:
+        tile_id: str | None = None,
+        product_id: str | None = None,
+        as_of_snapshot_id: int | None = None,
+    ) -> list[str]:
         """
         List all available bands
 
@@ -214,10 +215,10 @@ class IcebergCatalog:
     def query_metadata(
         self,
         tile_id: str,
-        year_month: Optional[str] = None,
-        band: Optional[str] = None,
-        as_of_snapshot_id: Optional[int] = None,
-    ) -> List[TileMetadata]:
+        year_month: str | None = None,
+        band: str | None = None,
+        as_of_snapshot_id: int | None = None,
+    ) -> list[TileMetadata]:
         """
         Query metadata for a specific tile
 
@@ -269,7 +270,7 @@ class IcebergCatalog:
 
         return metadata_list
 
-    def _aggregate_metadata(self, arrow_table) -> List[TileMetadata]:
+    def _aggregate_metadata(self, arrow_table) -> list[TileMetadata]:
         """Aggregate Arrow table rows into TileMetadata."""
         import pyarrow.compute as pc
 
@@ -283,7 +284,7 @@ class IcebergCatalog:
         year_months = arrow_table.column("year_month").to_pylist()
         bands = arrow_table.column("band").to_pylist()
 
-        unique_combinations = set(zip(tile_ids, year_months, bands))
+        unique_combinations = set(zip(tile_ids, year_months, bands, strict=False))
 
         for tile_id, year_month, band in unique_combinations:
             # Filter for this combination
@@ -322,6 +323,7 @@ class IcebergCatalog:
                 if wkb:
                     try:
                         from shapely import wkb as shapely_wkb
+
                         geom = shapely_wkb.loads(wkb)
                         bounds = geom.bounds  # (minx, miny, maxx, maxy)
                         break
@@ -351,9 +353,9 @@ class IcebergCatalog:
         self,
         tile_id: str,
         year_month: str,
-        bands: Optional[List[str]] = None,
-        as_of_snapshot_id: Optional[int] = None,
-    ) -> Dict[str, str]:
+        bands: list[str] | None = None,
+        as_of_snapshot_id: int | None = None,
+    ) -> dict[str, str]:
         """
         Get chunk file paths for a tile-month combination
 
@@ -388,8 +390,8 @@ class IcebergCatalog:
     def get_tile_bounds(
         self,
         tile_id: str,
-        as_of_snapshot_id: Optional[int] = None,
-    ) -> Optional[Tuple[float, float, float, float]]:
+        as_of_snapshot_id: int | None = None,
+    ) -> tuple[float, float, float, float] | None:
         """
         Get geographic bounds for a tile
 
@@ -419,9 +421,9 @@ class IcebergCatalog:
         self,
         tile_id: str,
         band: str,
-        time_range: Optional[Tuple[datetime, datetime]] = None,
-        as_of_snapshot_id: Optional[int] = None,
-    ) -> Dict[str, float]:
+        time_range: tuple[datetime, datetime] | None = None,
+        as_of_snapshot_id: int | None = None,
+    ) -> dict[str, float]:
         """
         Get statistics for a tile-band combination
 
@@ -476,14 +478,14 @@ class IcebergCatalog:
             return {}
 
         return {
-            'min': min(m.min_value for m in metadata_list),
-            'max': max(m.max_value for m in metadata_list),
-            'mean': sum(m.mean_value for m in metadata_list) / len(metadata_list),
-            'cloud_cover': sum(m.cloud_cover for m in metadata_list) / len(metadata_list),
-            'num_observations': sum(m.num_observations for m in metadata_list),
+            "min": min(m.min_value for m in metadata_list),
+            "max": max(m.max_value for m in metadata_list),
+            "mean": sum(m.mean_value for m in metadata_list) / len(metadata_list),
+            "cloud_cover": sum(m.cloud_cover for m in metadata_list) / len(metadata_list),
+            "num_observations": sum(m.num_observations for m in metadata_list),
         }
 
-    def get_snapshot_history(self) -> List[Dict[str, Any]]:
+    def get_snapshot_history(self) -> list[dict[str, Any]]:
         """
         Get snapshot history for Time Travel
 
@@ -503,13 +505,13 @@ class IcebergCatalog:
         self.storage.table.refresh()
         return self.storage.get_snapshot_history()
 
-    def get_current_snapshot_id(self) -> Optional[int]:
+    def get_current_snapshot_id(self) -> int | None:
         """Get the current snapshot ID."""
         # Refresh table to see latest snapshot
         self.storage.table.refresh()
         return self.storage.get_current_snapshot_id()
 
-    def get_table_stats(self) -> Dict[str, Any]:
+    def get_table_stats(self) -> dict[str, Any]:
         """
         Get table statistics
 

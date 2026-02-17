@@ -6,15 +6,11 @@ Supports two backends:
 - Iceberg: Uses Apache Iceberg tables with SQLite catalog
 """
 
-from typing import List, Optional, Tuple, Dict, Union, TYPE_CHECKING
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
+from typing import TYPE_CHECKING, Union
 
-from pixelquery._internal.storage.geoparquet import (
-    GeoParquetReader,
-    GeoParquetWriter,
-    TileMetadata
-)
+from pixelquery._internal.storage.geoparquet import GeoParquetReader, GeoParquetWriter, TileMetadata
 
 if TYPE_CHECKING:
     from pixelquery.catalog.iceberg import IcebergCatalog
@@ -78,10 +74,18 @@ class LocalCatalog:
         warehouse = Path(warehouse_path)
 
         if backend == "auto":
+            # Check for Icechunk repository (highest priority)
+            icechunk_dir = warehouse / ".icechunk"
+            if icechunk_dir.exists():
+                from pixelquery.catalog.icechunk_catalog import IcechunkCatalog
+
+                return IcechunkCatalog(str(warehouse_path))
+
             # Check for Iceberg catalog
             iceberg_db = warehouse / "catalog.db"
             if iceberg_db.exists():
                 from pixelquery.catalog.iceberg import IcebergCatalog
+
                 return IcebergCatalog(str(warehouse_path))
 
             # Check for Arrow metadata
@@ -91,17 +95,26 @@ class LocalCatalog:
 
             # Default to Iceberg for new warehouses
             from pixelquery.catalog.iceberg import IcebergCatalog
+
             return IcebergCatalog(str(warehouse_path))
+
+        elif backend == "icechunk":
+            from pixelquery.catalog.icechunk_catalog import IcechunkCatalog
+
+            return IcechunkCatalog(str(warehouse_path))
 
         elif backend == "iceberg":
             from pixelquery.catalog.iceberg import IcebergCatalog
+
             return IcebergCatalog(str(warehouse_path))
 
         elif backend == "arrow":
             return cls(str(warehouse_path))
 
         else:
-            raise ValueError(f"Unknown backend: {backend}. Use 'auto', 'arrow', or 'iceberg'")
+            raise ValueError(
+                f"Unknown backend: {backend}. Use 'auto', 'arrow', 'iceberg', or 'icechunk'"
+            )
 
     def __init__(self, warehouse_path: str):
         """
@@ -130,10 +143,10 @@ class LocalCatalog:
 
     def list_tiles(
         self,
-        bounds: Optional[Tuple[float, float, float, float]] = None,
-        time_range: Optional[Tuple[datetime, datetime]] = None,
-        product_id: Optional[str] = None
-    ) -> List[str]:
+        bounds: tuple[float, float, float, float] | None = None,
+        time_range: tuple[datetime, datetime] | None = None,
+        product_id: str | None = None,
+    ) -> list[str]:
         """
         List all unique tile IDs in the catalog
 
@@ -158,10 +171,7 @@ class LocalCatalog:
 
         # Query metadata
         if bounds:
-            metadata_list = self.reader.query_by_bounds(
-                str(self.metadata_path),
-                bounds
-            )
+            metadata_list = self.reader.query_by_bounds(str(self.metadata_path), bounds)
         else:
             metadata_list = self.reader.read_metadata(str(self.metadata_path))
 
@@ -170,26 +180,16 @@ class LocalCatalog:
             start, end = time_range
             start_str = start.strftime("%Y-%m")
             end_str = end.strftime("%Y-%m")
-            metadata_list = [
-                m for m in metadata_list
-                if start_str <= m.year_month <= end_str
-            ]
+            metadata_list = [m for m in metadata_list if start_str <= m.year_month <= end_str]
 
         if product_id:
-            metadata_list = [
-                m for m in metadata_list
-                if m.product_id == product_id
-            ]
+            metadata_list = [m for m in metadata_list if m.product_id == product_id]
 
         # Extract unique tile IDs
-        tile_ids = sorted(set(m.tile_id for m in metadata_list))
+        tile_ids = sorted({m.tile_id for m in metadata_list})
         return tile_ids
 
-    def list_bands(
-        self,
-        tile_id: Optional[str] = None,
-        product_id: Optional[str] = None
-    ) -> List[str]:
+    def list_bands(self, tile_id: str | None = None, product_id: str | None = None) -> list[str]:
         """
         List all available bands
 
@@ -220,15 +220,12 @@ class LocalCatalog:
             metadata_list = [m for m in metadata_list if m.product_id == product_id]
 
         # Extract unique bands
-        bands = sorted(set(m.band for m in metadata_list))
+        bands = sorted({m.band for m in metadata_list})
         return bands
 
     def query_metadata(
-        self,
-        tile_id: str,
-        year_month: Optional[str] = None,
-        band: Optional[str] = None
-    ) -> List[TileMetadata]:
+        self, tile_id: str, year_month: str | None = None, band: str | None = None
+    ) -> list[TileMetadata]:
         """
         Query metadata for a specific tile
 
@@ -250,9 +247,7 @@ class LocalCatalog:
 
         # Query by tile and time
         metadata_list = self.reader.query_by_tile_and_time(
-            str(self.metadata_path),
-            tile_id,
-            year_month
+            str(self.metadata_path), tile_id, year_month
         )
 
         # Filter by band
@@ -262,11 +257,8 @@ class LocalCatalog:
         return metadata_list
 
     def get_chunk_paths(
-        self,
-        tile_id: str,
-        year_month: str,
-        bands: Optional[List[str]] = None
-    ) -> Dict[str, str]:
+        self, tile_id: str, year_month: str, bands: list[str] | None = None
+    ) -> dict[str, str]:
         """
         Get chunk file paths for a tile-month combination
 
@@ -294,7 +286,7 @@ class LocalCatalog:
         chunk_paths = {m.band: m.chunk_path for m in metadata_list}
         return chunk_paths
 
-    def get_tile_bounds(self, tile_id: str) -> Optional[Tuple[float, float, float, float]]:
+    def get_tile_bounds(self, tile_id: str) -> tuple[float, float, float, float] | None:
         """
         Get geographic bounds for a tile
 
@@ -320,11 +312,7 @@ class LocalCatalog:
 
         return None
 
-    def add_tile_metadata(
-        self,
-        metadata: TileMetadata,
-        mode: str = "append"
-    ):
+    def add_tile_metadata(self, metadata: TileMetadata, mode: str = "append"):
         """
         Add tile metadata to the catalog
 
@@ -350,17 +338,9 @@ class LocalCatalog:
             ... )
             >>> catalog.add_tile_metadata(metadata)
         """
-        self.writer.write_metadata(
-            [metadata],
-            str(self.metadata_path),
-            mode=mode
-        )
+        self.writer.write_metadata([metadata], str(self.metadata_path), mode=mode)
 
-    def add_tile_metadata_batch(
-        self,
-        metadata_list: List[TileMetadata],
-        mode: str = "append"
-    ):
+    def add_tile_metadata_batch(self, metadata_list: list[TileMetadata], mode: str = "append"):
         """
         Add multiple tile metadata records in batch
 
@@ -372,18 +352,11 @@ class LocalCatalog:
             >>> metadata_list = [...]  # List of TileMetadata
             >>> catalog.add_tile_metadata_batch(metadata_list)
         """
-        self.writer.write_metadata(
-            metadata_list,
-            str(self.metadata_path),
-            mode=mode
-        )
+        self.writer.write_metadata(metadata_list, str(self.metadata_path), mode=mode)
 
     def get_statistics(
-        self,
-        tile_id: str,
-        band: str,
-        time_range: Optional[Tuple[datetime, datetime]] = None
-    ) -> Dict[str, float]:
+        self, tile_id: str, band: str, time_range: tuple[datetime, datetime] | None = None
+    ) -> dict[str, float]:
         """
         Get statistics for a tile-band combination
 
@@ -407,28 +380,21 @@ class LocalCatalog:
             start, end = time_range
             start_str = start.strftime("%Y-%m")
             end_str = end.strftime("%Y-%m")
-            metadata_list = [
-                m for m in metadata_list
-                if start_str <= m.year_month <= end_str
-            ]
+            metadata_list = [m for m in metadata_list if start_str <= m.year_month <= end_str]
 
         if not metadata_list:
             return {}
 
         # Aggregate statistics
         return {
-            'min': min(m.min_value for m in metadata_list),
-            'max': max(m.max_value for m in metadata_list),
-            'mean': sum(m.mean_value for m in metadata_list) / len(metadata_list),
-            'cloud_cover': sum(m.cloud_cover for m in metadata_list) / len(metadata_list),
-            'num_observations': sum(m.num_observations for m in metadata_list)
+            "min": min(m.min_value for m in metadata_list),
+            "max": max(m.max_value for m in metadata_list),
+            "mean": sum(m.mean_value for m in metadata_list) / len(metadata_list),
+            "cloud_cover": sum(m.cloud_cover for m in metadata_list) / len(metadata_list),
+            "num_observations": sum(m.num_observations for m in metadata_list),
         }
 
     def __repr__(self) -> str:
         """String representation"""
         exists_str = "exists" if self.exists() else "not initialized"
-        return (
-            f"<LocalCatalog>\n"
-            f"Warehouse: {self.warehouse_path}\n"
-            f"Metadata: {exists_str}"
-        )
+        return f"<LocalCatalog>\nWarehouse: {self.warehouse_path}\nMetadata: {exists_str}"

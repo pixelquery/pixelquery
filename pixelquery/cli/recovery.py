@@ -87,7 +87,7 @@ def _run_repair(tool, args: argparse.Namespace) -> None:
 
     result = tool.repair(
         cleanup_temp=True,
-        cleanup_orphaned_data=getattr(args, 'cleanup_orphaned', False),
+        cleanup_orphaned_data=getattr(args, "cleanup_orphaned", False),
     )
 
     print("Repair Results:")

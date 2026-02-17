@@ -4,7 +4,6 @@ Sentinel-2 Product Profile
 Implements ProductProfile for Sentinel-2 L2A (Surface Reflectance) data.
 """
 
-from typing import Dict
 from dataclasses import dataclass
 
 
@@ -20,6 +19,7 @@ class Sentinel2BandInfo:
         resolution: Native spatial resolution in meters (10m or 20m)
         bandwidth: Spectral bandwidth in nanometers
     """
+
     native_name: str
     standard_name: str
     wavelength: float
@@ -75,87 +75,90 @@ class Sentinel2L2A:
     nodata: int = 0
 
     # Band specifications (immutable)
-    bands: Dict[str, Sentinel2BandInfo] = None
+    bands: dict[str, Sentinel2BandInfo] = None
 
     def __post_init__(self):
         """Initialize band definitions"""
         if self.bands is None:
             # Use object.__setattr__ because dataclass is frozen
-            object.__setattr__(self, 'bands', {
-                # 10m resolution bands
-                'blue': Sentinel2BandInfo(
-                    native_name='B02',
-                    standard_name='blue',
-                    wavelength=490.0,
-                    resolution=10.0,
-                    bandwidth=65.0
-                ),
-                'green': Sentinel2BandInfo(
-                    native_name='B03',
-                    standard_name='green',
-                    wavelength=560.0,
-                    resolution=10.0,
-                    bandwidth=35.0
-                ),
-                'red': Sentinel2BandInfo(
-                    native_name='B04',
-                    standard_name='red',
-                    wavelength=665.0,
-                    resolution=10.0,
-                    bandwidth=30.0
-                ),
-                'nir': Sentinel2BandInfo(
-                    native_name='B08',
-                    standard_name='nir',
-                    wavelength=842.0,
-                    resolution=10.0,
-                    bandwidth=115.0
-                ),
-
-                # 20m resolution bands
-                'red_edge_1': Sentinel2BandInfo(
-                    native_name='B05',
-                    standard_name='red_edge_1',
-                    wavelength=705.0,
-                    resolution=20.0,
-                    bandwidth=15.0
-                ),
-                'red_edge_2': Sentinel2BandInfo(
-                    native_name='B06',
-                    standard_name='red_edge_2',
-                    wavelength=740.0,
-                    resolution=20.0,
-                    bandwidth=15.0
-                ),
-                'red_edge_3': Sentinel2BandInfo(
-                    native_name='B07',
-                    standard_name='red_edge_3',
-                    wavelength=783.0,
-                    resolution=20.0,
-                    bandwidth=20.0
-                ),
-                'nir_narrow': Sentinel2BandInfo(
-                    native_name='B8A',
-                    standard_name='nir_narrow',
-                    wavelength=865.0,
-                    resolution=20.0,
-                    bandwidth=20.0
-                ),
-                'swir_1': Sentinel2BandInfo(
-                    native_name='B11',
-                    standard_name='swir_1',
-                    wavelength=1610.0,
-                    resolution=20.0,
-                    bandwidth=90.0
-                ),
-                'swir_2': Sentinel2BandInfo(
-                    native_name='B12',
-                    standard_name='swir_2',
-                    wavelength=2190.0,
-                    resolution=20.0,
-                    bandwidth=180.0
-                ),
-            })
+            object.__setattr__(
+                self,
+                "bands",
+                {
+                    # 10m resolution bands
+                    "blue": Sentinel2BandInfo(
+                        native_name="B02",
+                        standard_name="blue",
+                        wavelength=490.0,
+                        resolution=10.0,
+                        bandwidth=65.0,
+                    ),
+                    "green": Sentinel2BandInfo(
+                        native_name="B03",
+                        standard_name="green",
+                        wavelength=560.0,
+                        resolution=10.0,
+                        bandwidth=35.0,
+                    ),
+                    "red": Sentinel2BandInfo(
+                        native_name="B04",
+                        standard_name="red",
+                        wavelength=665.0,
+                        resolution=10.0,
+                        bandwidth=30.0,
+                    ),
+                    "nir": Sentinel2BandInfo(
+                        native_name="B08",
+                        standard_name="nir",
+                        wavelength=842.0,
+                        resolution=10.0,
+                        bandwidth=115.0,
+                    ),
+                    # 20m resolution bands
+                    "red_edge_1": Sentinel2BandInfo(
+                        native_name="B05",
+                        standard_name="red_edge_1",
+                        wavelength=705.0,
+                        resolution=20.0,
+                        bandwidth=15.0,
+                    ),
+                    "red_edge_2": Sentinel2BandInfo(
+                        native_name="B06",
+                        standard_name="red_edge_2",
+                        wavelength=740.0,
+                        resolution=20.0,
+                        bandwidth=15.0,
+                    ),
+                    "red_edge_3": Sentinel2BandInfo(
+                        native_name="B07",
+                        standard_name="red_edge_3",
+                        wavelength=783.0,
+                        resolution=20.0,
+                        bandwidth=20.0,
+                    ),
+                    "nir_narrow": Sentinel2BandInfo(
+                        native_name="B8A",
+                        standard_name="nir_narrow",
+                        wavelength=865.0,
+                        resolution=20.0,
+                        bandwidth=20.0,
+                    ),
+                    "swir_1": Sentinel2BandInfo(
+                        native_name="B11",
+                        standard_name="swir_1",
+                        wavelength=1610.0,
+                        resolution=20.0,
+                        bandwidth=90.0,
+                    ),
+                    "swir_2": Sentinel2BandInfo(
+                        native_name="B12",
+                        standard_name="swir_2",
+                        wavelength=2190.0,
+                        resolution=20.0,
+                        bandwidth=180.0,
+                    ),
+                },
+            )
 
     def get_band_by_native_name(self, native_name: str) -> Sentinel2BandInfo:
         """
@@ -181,29 +184,23 @@ class Sentinel2L2A:
                 return band_info
         raise KeyError(f"Band '{native_name}' not found in Sentinel-2 profile")
 
-    def get_10m_bands(self) -> Dict[str, Sentinel2BandInfo]:
+    def get_10m_bands(self) -> dict[str, Sentinel2BandInfo]:
         """
         Get all 10m resolution bands
 
         Returns:
             Dictionary of 10m bands (blue, green, red, nir)
         """
-        return {
-            name: band for name, band in self.bands.items()
-            if band.resolution == 10.0
-        }
+        return {name: band for name, band in self.bands.items() if band.resolution == 10.0}
 
-    def get_20m_bands(self) -> Dict[str, Sentinel2BandInfo]:
+    def get_20m_bands(self) -> dict[str, Sentinel2BandInfo]:
         """
         Get all 20m resolution bands
 
         Returns:
             Dictionary of 20m bands (red edge, narrow NIR, SWIR)
         """
-        return {
-            name: band for name, band in self.bands.items()
-            if band.resolution == 20.0
-        }
+        return {name: band for name, band in self.bands.items() if band.resolution == 20.0}
 
     def __repr__(self) -> str:
         """String representation"""

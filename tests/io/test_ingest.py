@@ -2,20 +2,21 @@
 Tests for IngestionPipeline
 """
 
-import pytest
-import tempfile
 import shutil
-from pathlib import Path
+import tempfile
 from datetime import datetime
+from pathlib import Path
+
 import numpy as np
+import pytest
 import rasterio
 from rasterio.transform import from_bounds
 
-from pixelquery.io.ingest import IngestionPipeline
-from pixelquery.io.cog import COGReader
-from pixelquery.grid.tile_grid import FixedTileGrid
-from pixelquery.catalog.local import LocalCatalog
 from pixelquery._internal.storage.arrow_chunk import ArrowChunkReader
+from pixelquery.catalog.local import LocalCatalog
+from pixelquery.grid.tile_grid import FixedTileGrid
+from pixelquery.io.cog import COGReader
+from pixelquery.io.ingest import IngestionPipeline
 
 
 class TestIngestionPipeline:
@@ -36,7 +37,7 @@ class TestIngestionPipeline:
 
         # Create 100x100 pixel COG covering small area
         width, height = 100, 100
-        bounds = (126.5, 37.0, 126.6, 37.1)  # ~11km × 11km
+        bounds = (126.5, 37.0, 126.6, 37.1)  # ~11km x 11km
 
         transform = from_bounds(*bounds, width, height)
 
@@ -45,14 +46,16 @@ class TestIngestionPipeline:
 
         # Write COG
         with rasterio.open(
-            cog_path, 'w',
-            driver='GTiff',
-            height=height, width=width,
+            cog_path,
+            "w",
+            driver="GTiff",
+            height=height,
+            width=width,
             count=4,
             dtype=np.uint16,
-            crs='EPSG:4326',
+            crs="EPSG:4326",
             transform=transform,
-            nodata=0
+            nodata=0,
         ) as dst:
             dst.write(data)
 
@@ -71,7 +74,7 @@ class TestIngestionPipeline:
             warehouse_path=temp_warehouse,
             tile_grid=tile_grid,
             catalog=catalog,
-            storage_backend="arrow"  # Force Arrow backend for consistency
+            storage_backend="arrow",  # Force Arrow backend for consistency
         )
 
     def test_init(self, pipeline, temp_warehouse):
@@ -87,7 +90,7 @@ class TestIngestionPipeline:
             cog_path=mock_cog_file,
             acquisition_time=datetime(2024, 6, 15, 10, 30),
             product_id="sentinel2_l2a",
-            band_mapping={1: "blue", 2: "green", 3: "red", 4: "nir"}
+            band_mapping={1: "blue", 2: "green", 3: "red", 4: "nir"},
         )
 
         # Should create metadata for each tile-band combination
@@ -108,7 +111,7 @@ class TestIngestionPipeline:
             cog_path=mock_cog_file,
             acquisition_time=datetime(2024, 6, 15),
             product_id="sentinel2_l2a",
-            band_mapping={1: "red"}
+            band_mapping={1: "red"},
         )
 
         # Check that files were created
@@ -123,7 +126,7 @@ class TestIngestionPipeline:
             cog_path=mock_cog_file,
             acquisition_time=datetime(2024, 6, 15),
             product_id="sentinel2_l2a",
-            band_mapping={1: "red", 2: "nir"}
+            band_mapping={1: "red", 2: "nir"},
         )
 
         # Query catalog for registered tiles
@@ -141,7 +144,7 @@ class TestIngestionPipeline:
             cog_path=mock_cog_file,
             acquisition_time=datetime(2024, 6, 15),
             product_id="sentinel2_l2a",
-            band_mapping={1: "blue", 2: "green", 3: "red", 4: "nir"}
+            band_mapping={1: "blue", 2: "green", 3: "red", 4: "nir"},
         )
 
         # Should have metadata for each band
@@ -157,7 +160,7 @@ class TestIngestionPipeline:
             cog_path=mock_cog_file,
             acquisition_time=datetime(2024, 6, 15),
             product_id="sentinel2_l2a",
-            band_mapping={1: "red"}
+            band_mapping={1: "red"},
         )
 
         # Check statistics are reasonable
@@ -172,7 +175,7 @@ class TestIngestionPipeline:
             cog_path=mock_cog_file,
             acquisition_time=datetime(2024, 6, 15),
             product_id="sentinel2_l2a",
-            band_mapping={1: "red"}
+            band_mapping={1: "red"},
         )
 
         # Read back chunk data
@@ -182,23 +185,23 @@ class TestIngestionPipeline:
             data, chunk_metadata = reader.read_chunk(str(chunk_path))
 
             # Check data structure
-            assert 'time' in data
-            assert 'pixels' in data
-            assert 'mask' in data
+            assert "time" in data
+            assert "pixels" in data
+            assert "mask" in data
 
             # Check data types
-            assert len(data['time']) > 0
-            assert len(data['pixels']) > 0
-            assert len(data['mask']) > 0
+            assert len(data["time"]) > 0
+            assert len(data["pixels"]) > 0
+            assert len(data["mask"]) > 0
 
             # Check pixel data
-            pixels = data['pixels'][0]
+            pixels = data["pixels"][0]
             assert isinstance(pixels, np.ndarray)
             assert pixels.dtype == np.uint16
 
             # Check metadata
             assert chunk_metadata is not None
-            assert 'product_id' in chunk_metadata
+            assert "product_id" in chunk_metadata
 
     def test_ingest_cog_year_month(self, pipeline, mock_cog_file):
         """Test year-month formatting"""
@@ -207,7 +210,7 @@ class TestIngestionPipeline:
             cog_path=mock_cog_file,
             acquisition_time=datetime(2024, 1, 15),
             product_id="sentinel2_l2a",
-            band_mapping={1: "red"}
+            band_mapping={1: "red"},
         )
         assert all(m.year_month == "2024-01" for m in metadata_list)
 
@@ -216,7 +219,7 @@ class TestIngestionPipeline:
             cog_path=mock_cog_file,
             acquisition_time=datetime(2024, 12, 25),
             product_id="sentinel2_l2a",
-            band_mapping={1: "red"}
+            band_mapping={1: "red"},
         )
         assert all(m.year_month == "2024-12" for m in metadata_list)
 
@@ -247,7 +250,7 @@ class TestIngestionPipelineEdgeCases:
             warehouse_path=temp_warehouse,
             tile_grid=tile_grid,
             catalog=catalog,
-            storage_backend="arrow"  # Force Arrow backend for consistency
+            storage_backend="arrow",  # Force Arrow backend for consistency
         )
 
     def test_ingest_nonexistent_file(self, pipeline):
@@ -257,7 +260,7 @@ class TestIngestionPipelineEdgeCases:
                 cog_path="nonexistent.tif",
                 acquisition_time=datetime(2024, 6, 15),
                 product_id="sentinel2_l2a",
-                band_mapping={1: "red"}
+                band_mapping={1: "red"},
             )
 
     def test_ingest_empty_band_mapping(self, pipeline):
@@ -273,13 +276,15 @@ class TestIngestionPipelineEdgeCases:
             data = np.ones((1, height, width), dtype=np.uint16)
 
             with rasterio.open(
-                cog_path, 'w',
-                driver='GTiff',
-                height=height, width=width,
+                cog_path,
+                "w",
+                driver="GTiff",
+                height=height,
+                width=width,
                 count=1,
                 dtype=np.uint16,
-                crs='EPSG:4326',
-                transform=transform
+                crs="EPSG:4326",
+                transform=transform,
             ) as dst:
                 dst.write(data)
 
@@ -288,7 +293,7 @@ class TestIngestionPipelineEdgeCases:
                 cog_path=str(cog_path),
                 acquisition_time=datetime(2024, 6, 15),
                 product_id="test",
-                band_mapping={}
+                band_mapping={},
             )
 
             # Should return empty list

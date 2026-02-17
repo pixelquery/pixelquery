@@ -1,340 +1,223 @@
 # PixelQuery
 
-> Apache Iceberg-based storage engine for satellite imagery with native multi-resolution support
+> Turn your COG files into an analysis-ready time-series data cube. No infrastructure required.
 
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![PyPI](https://img.shields.io/pypi/v/pixelquery.svg)](https://pypi.org/project/pixelquery/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://python.org)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-**Status**: 🚧 Early Development (API Design Phase)
+## What is PixelQuery?
 
-## Overview
+PixelQuery converts a directory of Cloud-Optimized GeoTIFFs (COGs) into a
+queryable time-series data cube backed by [Icechunk](https://icechunk.io/) virtual Zarr storage.
 
-PixelQuery transforms satellite imagery from a file-based system into a queryable data lake with:
-
-- **🎯 Multi-Resolution Native**: Seamlessly integrate Sentinel-2 (10m), Landsat-8 (30m), and Planet (3m) data
-- **⚡ Time-Series Optimized**: 5-30x faster than COG+STAC for multi-year queries
-- **🔒 ACID Transactions**: Metadata integrity via Apache Iceberg with Time Travel
-- **🐍 xarray-inspired API**: Familiar interface for data scientists
+- **Zero data copy**: Virtual references to original COGs (no duplication)
+- **Fast ingestion**: ~9ms per COG (243 files in 2 seconds)
+- **Lazy loading**: Data reads from COGs only when you call `.compute()`
+- **pip install**: No STAC server, no database, no infrastructure
+- **Multi-satellite**: Built-in product profiles for Planet, Sentinel-2, Landsat
 
 ## Quick Start
 
+```bash
+pip install pixelquery[icechunk]
+```
+
 ```python
 import pixelquery as pq
-from pixelquery.core.dataarray import DataArray
-from pixelquery.core.dataset import Dataset
-import numpy as np
 
-# Create a DataArray (xarray-like API)
-data = np.random.rand(10, 256, 256).astype(np.float32)
-times = np.array(['2024-01-01', '2024-02-01', '2024-03-01', '2024-04-01', '2024-05-01',
-                  '2024-06-01', '2024-07-01', '2024-08-01', '2024-09-01', '2024-10-01'],
-                 dtype='datetime64[D]')
+# Ingest COGs from a directory
+result = pq.ingest("./my_cogs/", band_names=["blue", "green", "red", "nir"])
+print(f"Ingested {result.scene_count} scenes in {result.elapsed:.1f}s")
 
-red = DataArray(
-    name="red",
-    data=data,
-    dims={"time": 10, "y": 256, "x": 256},
-    coords={"time": times}
-)
-
-# Select by label (sel) or integer index (isel)
-subset = red.sel(time=slice("2024-01-01", "2024-06-01"))  # First 6 months
-first_timestep = red.isel(time=0)  # First observation
-
-# Compute statistics
-temporal_mean = red.mean(dim="time")  # Mean over time -> (256, 256)
-overall_mean = red.mean()  # Scalar
-
-# Arithmetic operations (xarray-like)
-nir = DataArray(name="nir", data=np.random.rand(10, 256, 256).astype(np.float32),
-                dims={"time": 10, "y": 256, "x": 256})
-ndvi = (nir - red) / (nir + red)  # Element-wise operations
-
-# Convert to numpy
-arrays = red.to_numpy()  # Returns numpy array
+# Query as lazy xarray Dataset
+ds = pq.open_xarray("./warehouse")
+print(ds)  # Dimensions: (time: 243, band: 4, y: 874, x: 3519)
 ```
 
-## Architecture
+## 5-Minute Tutorial
 
-PixelQuery uses a 2-layer architecture:
-
-```
-┌─────────────────────────────────────────────┐
-│ Layer 1: Apache Iceberg                     │
-│ • Metadata + Data in Parquet files          │
-│ • ACID transactions (native)                │
-│ • Snapshot-based Time Travel                │
-│ • SQLite-backed catalog                     │
-└─────────────────────────────────────────────┘
-                    ↓
-┌─────────────────────────────────────────────┐
-│ Layer 2: GeoParquet                         │
-│ • Tile boundaries (WKB geometry)            │
-│ • R-tree spatial indexing                   │
-│ • Band statistics (min/max/mean)            │
-│ • DuckDB spatial query integration          │
-└─────────────────────────────────────────────┘
-```
-
-## Key Features
-
-### Multi-Resolution Fusion
+### 1. Inspect your COG files
 
 ```python
-# Query data from multiple satellites at different resolutions
-result = pq.query_by_bounds(
-    warehouse="warehouse",
-    bounds=(127.0, 37.5, 127.1, 37.6),
-    date_range=(datetime(2024, 1, 1), datetime(2024, 12, 31)),
+import pixelquery as pq
+
+# Check what you have
+meta = pq.inspect_cog("./scene.tif")
+print(meta)  # CRS, bounds, bands, resolution
+```
+
+### 2. Ingest
+
+```python
+result = pq.ingest(
+    "./planet_cogs/",
+    warehouse="./warehouse",
+    band_names=["blue", "green", "red", "nir"],
+    product_id="planet_sr",
+)
+```
+
+### 3. Query
+
+```python
+ds = pq.open_xarray("./warehouse")
+
+# Filter by time range
+from datetime import datetime
+ds = pq.open_xarray(
+    "./warehouse",
+    time_range=(datetime(2024, 1, 1), datetime(2024, 12, 31)),
     bands=["red", "nir"],
-    target_resolution=10.0  # Unified to 10m
 )
-
-# All data resampled to common resolution
-df = result.to_pandas()
-print(df['product_id'].unique())
-# ['sentinel2_l2a', 'landsat8_l2', 'planet_l3a']
 ```
 
-### Time-Series Analysis
+### 4. Compute NDVI
 
 ```python
-# Load entire time-series efficiently
-ds = pq.open_dataset(
-    "warehouse",
-    tile_id="x0024_y0041",
-    time_range=(datetime(2020, 1, 1), datetime(2024, 12, 31))
-)
-
-# Compute NDVI trend
-ndvi = pq.compute_ndvi(ds["red"], ds["nir"])
-monthly_mean = ndvi.resample(time="1M").mean()
-
-# Detect anomalies
-ndvi_std = ndvi.std(dim="time")
-anomalies = (ndvi - ndvi.mean(dim="time")) / ndvi_std > 2
+nir = ds["data"].sel(band="nir")
+red = ds["data"].sel(band="red")
+ndvi = (nir - red) / (nir + red)
+ndvi.mean(dim="time").compute()  # Actual COG reads happen here
 ```
 
-### Time Travel (Iceberg Snapshots)
+### 5. Point time-series
 
 ```python
-# Query historical state
-result_v1 = pq.query_by_bounds(
-    warehouse="warehouse",
-    bounds=(...),
-    as_of_snapshot_id=12345  # Specific version
-)
+ts = pq.timeseries("./warehouse", lon=127.05, lat=37.55)
+ts["data"].sel(band="nir").plot()  # Plot NIR time-series
 ```
 
-## Implementation Status
+## Product Profiles
 
-| Feature | Status | Notes |
-|---------|--------|-------|
-| **DataArray** | | |
-| `sel()` - label-based selection | Implemented | Supports datetime coordinates |
-| `isel()` - integer-based selection | Implemented | |
-| `mean()`, `max()`, `min()` | Implemented | Single or multiple dimensions |
-| `to_numpy()` | Implemented | |
-| Arithmetic operations (+, -, *, /) | Implemented | |
-| `resample()` | Planned (Phase 3) | |
-| `to_xarray()`, `to_pandas()` | Planned (Phase 3) | |
-| **Dataset** | | |
-| `to_numpy()` | Implemented | Returns dict of arrays |
-| `to_xarray()`, `to_pandas()` | Planned (Phase 3) | |
-| **Ingestion** | | |
-| COG ingestion | Implemented | |
-| Parallel processing | Implemented | |
-| **Storage** | | |
-| Iceberg storage | Implemented | Native ACID transactions |
-| Time Travel | Implemented | Via snapshots |
-| GeoParquet catalog | Implemented | |
-| **CLI Tools** | | |
-| `info` - Show warehouse metadata | Implemented | |
-| `migrate` - Arrow to Iceberg migration | Implemented | |
-| `recovery diagnose` - Detect issues | Implemented | |
-| `recovery repair` - Fix warehouse | Implemented | |
+Register satellite product definitions for multi-product warehouses:
+
+```python
+pq.register_product(
+    "sentinel2_l2a",
+    bands={"blue": 1, "green": 2, "red": 3, "nir": 7},
+    resolution=10.0,
+    provider="ESA",
+)
+
+# Browse warehouse contents
+cat = pq.catalog("./warehouse")
+print(cat.summary())
+# === PixelQuery Warehouse Summary ===
+# Products: 2
+#
+# planet_sr (Planet)
+#   Scenes: 243
+#   Bands: blue, green, red, nir
+#   Resolution: 3.0m
+```
+
+## How It Works
+
+```
+COG files (on disk/S3)
+    |
+    v
+VirtualTIFF parser (reads byte offsets, ~3ms/file)
+    |
+    v
+Icechunk repository (stores virtual chunk references)
+    |
+    v
+xarray.open_zarr() (lazy loading)
+    |
+    v
+.compute() → reads actual pixel data from original COGs
+```
+
+No data is copied during ingestion. Icechunk stores only the byte-range
+references to the original COG files. Actual pixel data is read on-demand
+when you call `.compute()` or `.values`.
 
 ## Performance
 
-**Multi-year time-series queries** (vs COG+STAC):
+| Operation | Result |
+|-----------|--------|
+| Single COG ingest | ~3ms (virtual reference) |
+| 243 COG batch | 2.1s (8.6ms/COG) |
+| Storage overhead | 0.2MB for 4.4GB data |
+| Metadata query | 59ms |
+| Compute 6 scenes | 255ms |
 
-| Operation | PixelQuery | COG+STAC | Speedup |
-|-----------|------------|----------|---------|
-| 1 year (120 images) | 4-11s | 45-120s | **10-30x** |
-| 5 years (600 images) | 5-18s | 150-400s | **25-30x** |
+## Time Travel
 
-*Benchmark: Single tile, 2 bands, monthly aggregation*
+Icechunk provides built-in versioning. Every ingest creates a snapshot.
 
-*See [BENCHMARK_RESULTS.md](./BENCHMARK_RESULTS.md) for detailed methodology and results.*
+```python
+# View history
+history = pq.open_xarray("./warehouse", snapshot_id=None)
+
+# Query at a specific point in time
+cat = pq.catalog("./warehouse")
+snapshots = cat.get_snapshot_history()
+old_ds = pq.open_xarray("./warehouse", snapshot_id=snapshots[-1]["snapshot_id"])
+```
+
+## API Reference
+
+### Core Functions
+
+| Function | Description |
+|----------|-------------|
+| `pq.ingest(source, warehouse, ...)` | Auto-scan and ingest COGs |
+| `pq.open_xarray(warehouse, ...)` | Query as lazy xarray Dataset |
+| `pq.timeseries(warehouse, lon, lat, ...)` | Extract point time-series |
+
+### Inspection
+
+| Function | Description |
+|----------|-------------|
+| `pq.inspect_cog(path)` | Read COG metadata (CRS, bounds, bands) |
+| `pq.inspect_directory(dir)` | Scan directory for COGs |
+
+### Catalog
+
+| Function | Description |
+|----------|-------------|
+| `pq.catalog(warehouse)` | Get catalog for warehouse |
+| `pq.register_product(...)` | Register a product profile |
+| `catalog.summary()` | Formatted warehouse summary |
+| `catalog.products()` | List product IDs |
+| `catalog.scenes(...)` | List scenes with filters |
 
 ## Installation
 
+### From PyPI
+
 ```bash
-# From source (development)
+pip install pixelquery[icechunk]
+```
+
+### From Source
+
+```bash
 git clone https://github.com/yourusername/pixelquery.git
 cd pixelquery
-pip install -e ".[dev]"
+pip install -e ".[icechunk,dev]"
 ```
 
-**Requirements:**
-- Python 3.11+
-- Apache Iceberg (PyIceberg)
-- PyArrow
-- GeoPandas
-- Rasterio
-- DuckDB
+## When to Use PixelQuery
 
-## CLI Tools
+| Scenario | Best Tool |
+|----------|-----------|
+| Private COGs -> time-series analysis | **PixelQuery** |
+| Public satellite data catalog | STAC + stackstac |
+| Enterprise cloud data platform | Arraylake |
+| Planetary-scale analysis | Google Earth Engine |
 
-PixelQuery provides command-line tools for warehouse management and diagnostics:
-
-```bash
-# Show warehouse metadata and info
-pixelquery info ./warehouse
-
-# Migrate Arrow storage to Iceberg
-pixelquery migrate ./warehouse
-
-# Diagnose warehouse issues
-pixelquery recovery diagnose ./warehouse
-
-# Repair warehouse (fixes corruption, orphaned files, etc)
-pixelquery recovery repair ./warehouse
-```
-
-## Documentation
-
-- **[API Examples](docs/api-examples.md)** - Real-world usage examples
-- **[Package Structure](docs/package-structure.md)** - Architecture and design
-- **[Iceberg Integration](docs/iceberg-integration.md)** - Apache Iceberg storage and Time Travel
-- **[Optimization Summary](docs/optimization_summary.md)** - Performance optimizations and benchmarks
-- **[Refactoring Progress](docs/refactoring-progress.md)** - Development status
-
-## Project Status
-
-**Current Phase**: API Design (Phase 2 complete)
-
-| Phase | Status | Progress |
-|-------|--------|----------|
-| Phase 1: Package Structure | ✅ Complete | 100% |
-| Phase 2: API Design | ✅ Complete | 100% |
-| Phase 3: Documentation | 🔄 In Progress | 60% |
-| Phase 4: Testing | 🔄 In Progress | 30% |
-| Phase 5: Implementation | ⏳ Planned | 0% |
-
-See [refactoring-progress.md](docs/refactoring-progress.md) for detailed status.
-
-## Development
-
-```bash
-# Install development dependencies
-pip install -e ".[dev]"
-
-# Run tests
-pytest
-
-# Run tests with coverage
-pytest --cov=pixelquery --cov-report=html
-
-# Format code
-black pixelquery tests
-
-# Type checking
-mypy pixelquery
-```
-
-## Comparison with Alternatives
-
-### vs COG+STAC
-
-| Feature | PixelQuery | COG+STAC |
-|---------|------------|----------|
-| Multi-resolution fusion | ✅ Native | ❌ Manual |
-| Time-series queries | ✅ Optimized (5-30x faster) | ⚠️ Slow (per-file reads) |
-| ACID metadata | ✅ Iceberg | ❌ No guarantees |
-| Time Travel | ✅ Built-in | ❌ No |
-| Ecosystem | 🆕 New | ✅ Mature |
-
-### vs Google Earth Engine
-
-| Feature | PixelQuery | Earth Engine |
-|---------|------------|--------------|
-| Deployment | ✅ Self-hosted | ☁️ Cloud only |
-| Pricing | 🆓 Free (open-source) | 💰 Pay-per-use |
-| Custom data | ✅ Full control | ⚠️ Limited |
-| Python API | ✅ Native | ✅ Available |
-
-## Use Cases
-
-### 1. Agricultural Monitoring
-
-```python
-# Monitor crop health over growing season
-ds = pq.open_dataset("warehouse", tile_id="farm_tile")
-ndvi = pq.compute_ndvi(ds["red"], ds["nir"])
-monthly = ndvi.resample(time="1M").mean()
-```
-
-### 2. Disaster Monitoring
-
-```python
-# Rapid multi-source data integration
-ds = pq.open_mfdataset(
-    "warehouse",
-    tile_ids=disaster_area_tiles,
-    time_range=(event_date - timedelta(days=7), event_date + timedelta(days=7))
-)
-```
-
-### 3. Climate Research
-
-```python
-# Long-term trend analysis
-ds = pq.open_dataset(
-    "warehouse",
-    tile_id="study_area",
-    time_range=(datetime(2000, 1, 1), datetime(2024, 12, 31))
-)
-```
+PixelQuery is designed for researchers and developers who have their own COG
+files and want to query them as a time-series data cube without setting up
+any infrastructure.
 
 ## Contributing
 
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Contributions are welcome! Please open an issue or PR.
 
 ## License
 
-Apache License 2.0 - see [LICENSE](LICENSE) for details.
-
-## Citation
-
-If you use PixelQuery in your research, please cite:
-
-```bibtex
-@software{pixelquery2024,
-  title = {PixelQuery: Apache Iceberg-based storage engine for satellite imagery},
-  author = {PixelQuery Contributors},
-  year = {2024},
-  url = {https://github.com/yourusername/pixelquery}
-}
-```
-
-## References
-
-- **Design Inspiration**:
-  - [xarray](https://xarray.dev/) - Multi-dimensional labeled arrays
-  - [Apache Iceberg](https://iceberg.apache.org/) - Table format for large datasets
-  - [Rasterio](https://rasterio.readthedocs.io/) - Geospatial raster I/O
-  - [Polars](https://www.pola.rs/) - Fast DataFrame library
-
-## Acknowledgments
-
-Built with:
-- [Apache Iceberg](https://iceberg.apache.org/) - ACID transactions
-- [PyArrow](https://arrow.apache.org/docs/python/) - Efficient data structures
-- [GeoPandas](https://geopandas.org/) - Geospatial operations
-- [DuckDB](https://duckdb.org/) - Spatial queries
-
----
-
-**Note**: This project is in early development. The API is subject to change.
+Apache 2.0

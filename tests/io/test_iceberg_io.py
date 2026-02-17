@@ -2,16 +2,16 @@
 Tests for IcebergPixelWriter and IcebergPixelReader
 """
 
-import pytest
-import tempfile
 import shutil
+import tempfile
+from datetime import UTC, datetime, timezone
 from pathlib import Path
-from datetime import datetime, timezone
 
 import numpy as np
+import pytest
 
-from pixelquery.io.iceberg_writer import IcebergPixelWriter
 from pixelquery.io.iceberg_reader import IcebergPixelReader
+from pixelquery.io.iceberg_writer import IcebergPixelWriter
 
 
 class TestIcebergPixelWriter:
@@ -35,7 +35,7 @@ class TestIcebergPixelWriter:
         return {
             "tile_id": "x0024_y0041",
             "band": "red",
-            "time": datetime(2024, 1, 15, 12, 0, 0, tzinfo=timezone.utc),
+            "time": datetime(2024, 1, 15, 12, 0, 0, tzinfo=UTC),
             "pixels": np.array([[100, 200], [300, 400]], dtype=np.uint16),
             "mask": np.array([[True, True], [False, True]], dtype=bool),
             "product_id": "sentinel2_l2a",
@@ -69,7 +69,7 @@ class TestIcebergPixelWriter:
         snapshot_id = writer.write_observation(
             tile_id="x0024_y0041",
             band="red",
-            time=datetime(2024, 1, 15, tzinfo=timezone.utc),
+            time=datetime(2024, 1, 15, tzinfo=UTC),
             pixels=np.array([[100, 200], [300, 400]], dtype=np.uint16),
             mask=np.array([[True, True], [False, True]], dtype=bool),
             product_id="sentinel2_l2a",
@@ -88,7 +88,7 @@ class TestIcebergPixelWriter:
         snapshot_id = writer.write_observation(
             tile_id="x0024_y0041",
             band="red",
-            time=datetime(2024, 1, 15, tzinfo=timezone.utc),
+            time=datetime(2024, 1, 15, tzinfo=UTC),
             pixels=np.array([[100, 200], [300, 400]], dtype=np.uint16),
             mask=np.array([[True, True], [False, True]], dtype=bool),
             product_id="sentinel2_l2a",
@@ -203,7 +203,7 @@ class TestIcebergPixelReader:
         return {
             "tile_id": "x0024_y0041",
             "band": "red",
-            "time": datetime(2024, 1, 15, 12, 0, 0, tzinfo=timezone.utc),
+            "time": datetime(2024, 1, 15, 12, 0, 0, tzinfo=UTC),
             "pixels": np.array([[100, 200], [300, 400]], dtype=np.uint16),
             "mask": np.array([[True, True], [False, True]], dtype=bool),
             "product_id": "sentinel2_l2a",
@@ -268,16 +268,13 @@ class TestIcebergPixelReader:
         # Write observations in different months
         for month in [1, 2, 3]:
             obs = sample_observation.copy()
-            obs["time"] = datetime(2024, month, 15, tzinfo=timezone.utc)
+            obs["time"] = datetime(2024, month, 15, tzinfo=UTC)
             writer.write_observation(**obs)
 
         # Query only January
         result = reader.read_tile(
             "x0024_y0041",
-            time_range=(
-                datetime(2024, 1, 1, tzinfo=timezone.utc),
-                datetime(2024, 1, 31, tzinfo=timezone.utc)
-            )
+            time_range=(datetime(2024, 1, 1, tzinfo=UTC), datetime(2024, 1, 31, tzinfo=UTC)),
         )
 
         assert "red" in result
@@ -330,11 +327,7 @@ class TestIcebergPixelReader:
 
     def test_read_observation_not_found(self, reader):
         """Test read_observation() for non-existent observation"""
-        result = reader.read_observation(
-            "x0024_y0041",
-            "red",
-            datetime(2024, 1, 15, tzinfo=timezone.utc)
-        )
+        result = reader.read_observation("x0024_y0041", "red", datetime(2024, 1, 15, tzinfo=UTC))
 
         assert result is None
 
@@ -362,19 +355,16 @@ class TestIcebergPixelReader:
         """Test list_tiles() with time range filter"""
         # Write observations in different months
         obs1 = sample_observation.copy()
-        obs1["time"] = datetime(2024, 1, 15, tzinfo=timezone.utc)
+        obs1["time"] = datetime(2024, 1, 15, tzinfo=UTC)
         writer.write_observation(**obs1)
 
         obs2 = sample_observation.copy()
-        obs2["time"] = datetime(2024, 3, 15, tzinfo=timezone.utc)
+        obs2["time"] = datetime(2024, 3, 15, tzinfo=UTC)
         writer.write_observation(**obs2)
 
         # Query only January
         tiles = reader.list_tiles(
-            time_range=(
-                datetime(2024, 1, 1, tzinfo=timezone.utc),
-                datetime(2024, 1, 31, tzinfo=timezone.utc)
-            )
+            time_range=(datetime(2024, 1, 1, tzinfo=UTC), datetime(2024, 1, 31, tzinfo=UTC))
         )
 
         assert len(tiles) >= 1
@@ -441,7 +431,7 @@ class TestIcebergPixelReader:
         # Write observations at different times
         for day in [1, 15, 28]:
             obs = sample_observation.copy()
-            obs["time"] = datetime(2024, 1, day, tzinfo=timezone.utc)
+            obs["time"] = datetime(2024, 1, day, tzinfo=UTC)
             writer.write_observation(**obs)
 
         time_range = reader.list_time_range("x0024_y0041", "red")
@@ -472,17 +462,14 @@ class TestIcebergPixelReader:
         # Write observations in different months
         for month in [1, 2, 3]:
             obs = sample_observation.copy()
-            obs["time"] = datetime(2024, month, 15, tzinfo=timezone.utc)
+            obs["time"] = datetime(2024, month, 15, tzinfo=UTC)
             writer.write_observation(**obs)
 
         # Count only January
         count = reader.count_observations(
             "x0024_y0041",
             "red",
-            time_range=(
-                datetime(2024, 1, 1, tzinfo=timezone.utc),
-                datetime(2024, 1, 31, tzinfo=timezone.utc)
-            )
+            time_range=(datetime(2024, 1, 1, tzinfo=UTC), datetime(2024, 1, 31, tzinfo=UTC)),
         )
 
         assert count == 1
@@ -511,7 +498,7 @@ class TestIcebergIOIntegration:
                     obs = {
                         "tile_id": tile_id,
                         "band": band,
-                        "time": datetime(2024, month, 15, tzinfo=timezone.utc),
+                        "time": datetime(2024, month, 15, tzinfo=UTC),
                         "pixels": np.array([[100, 200], [300, 400]], dtype=np.uint16),
                         "mask": np.array([[True, True], [False, True]], dtype=bool),
                         "product_id": "sentinel2_l2a",
@@ -543,7 +530,7 @@ class TestIcebergIOIntegration:
         obs1 = {
             "tile_id": "x0024_y0041",
             "band": "red",
-            "time": datetime(2024, 1, 15, tzinfo=timezone.utc),
+            "time": datetime(2024, 1, 15, tzinfo=UTC),
             "pixels": np.array([[100, 200], [300, 400]], dtype=np.uint16),
             "mask": np.array([[True, True], [False, True]], dtype=bool),
             "product_id": "sentinel2_l2a",

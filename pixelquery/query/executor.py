@@ -2,14 +2,10 @@
 Query executor - orchestrates data loading and query execution
 """
 
-from typing import Optional, List, Tuple, Dict, Any
 from datetime import datetime
-from pathlib import Path
-import numpy as np
-from numpy.typing import NDArray
 
-from pixelquery.catalog.local import LocalCatalog
 from pixelquery._internal.storage.arrow_chunk import ArrowChunkReader
+from pixelquery.catalog.local import LocalCatalog
 from pixelquery.core.dataset import Dataset
 
 
@@ -52,9 +48,9 @@ class QueryExecutor:
     def load_tile(
         self,
         tile_id: str,
-        time_range: Optional[Tuple[datetime, datetime]] = None,
-        bands: Optional[List[str]] = None,
-        product_id: Optional[str] = None
+        time_range: tuple[datetime, datetime] | None = None,
+        bands: list[str] | None = None,
+        product_id: str | None = None,
     ) -> Dataset:
         """
         Load data for a specific tile
@@ -90,9 +86,7 @@ class QueryExecutor:
             while current <= end:
                 year_month = current.strftime("%Y-%m")
                 for band in bands:
-                    tile_metadata = self.catalog.query_metadata(
-                        tile_id, year_month, band
-                    )
+                    tile_metadata = self.catalog.query_metadata(tile_id, year_month, band)
                     metadata_list.extend(tile_metadata)
 
                 # Move to next month
@@ -118,11 +112,9 @@ class QueryExecutor:
                 chunk_path = self.warehouse_path / metadata.chunk_path
 
                 if chunk_path.exists():
-                    chunk_data, chunk_meta = self.chunk_reader.read_chunk(
-                        str(chunk_path)
-                    )
+                    chunk_data, _chunk_meta = self.chunk_reader.read_chunk(str(chunk_path))
                     # Extend to collect all time observations
-                    band_data_list.extend(chunk_data['pixels'])
+                    band_data_list.extend(chunk_data["pixels"])
 
             # Store list of time observations
             if band_data_list:
@@ -138,22 +130,18 @@ class QueryExecutor:
             time_range=time_range,
             bands=bands,
             data=data,
-            metadata={
-                'bounds': bounds,
-                'product_id': product_id,
-                'num_chunks': len(metadata_list)
-            }
+            metadata={"bounds": bounds, "product_id": product_id, "num_chunks": len(metadata_list)},
         )
 
         return dataset
 
     def load_tiles(
         self,
-        tile_ids: List[str],
-        time_range: Optional[Tuple[datetime, datetime]] = None,
-        bands: Optional[List[str]] = None,
-        product_id: Optional[str] = None
-    ) -> Dict[str, Dataset]:
+        tile_ids: list[str],
+        time_range: tuple[datetime, datetime] | None = None,
+        bands: list[str] | None = None,
+        product_id: str | None = None,
+    ) -> dict[str, Dataset]:
         """
         Load data for multiple tiles
 
@@ -177,20 +165,17 @@ class QueryExecutor:
         datasets = {}
         for tile_id in tile_ids:
             datasets[tile_id] = self.load_tile(
-                tile_id=tile_id,
-                time_range=time_range,
-                bands=bands,
-                product_id=product_id
+                tile_id=tile_id, time_range=time_range, bands=bands, product_id=product_id
             )
         return datasets
 
     def query_by_bounds(
         self,
-        bounds: Tuple[float, float, float, float],
-        time_range: Optional[Tuple[datetime, datetime]] = None,
-        bands: Optional[List[str]] = None,
-        product_id: Optional[str] = None
-    ) -> Dict[str, Dataset]:
+        bounds: tuple[float, float, float, float],
+        time_range: tuple[datetime, datetime] | None = None,
+        bands: list[str] | None = None,
+        product_id: str | None = None,
+    ) -> dict[str, Dataset]:
         """
         Query data by spatial bounds
 
@@ -212,25 +197,20 @@ class QueryExecutor:
         """
         # Find tiles that intersect with bounds
         tile_ids = self.catalog.list_tiles(
-            bounds=bounds,
-            time_range=time_range,
-            product_id=product_id
+            bounds=bounds, time_range=time_range, product_id=product_id
         )
 
         # Load data for each tile
         return self.load_tiles(
-            tile_ids=tile_ids,
-            time_range=time_range,
-            bands=bands,
-            product_id=product_id
+            tile_ids=tile_ids, time_range=time_range, bands=bands, product_id=product_id
         )
 
     def get_available_tiles(
         self,
-        bounds: Optional[Tuple[float, float, float, float]] = None,
-        time_range: Optional[Tuple[datetime, datetime]] = None,
-        product_id: Optional[str] = None
-    ) -> List[str]:
+        bounds: tuple[float, float, float, float] | None = None,
+        time_range: tuple[datetime, datetime] | None = None,
+        product_id: str | None = None,
+    ) -> list[str]:
         """
         Get list of available tiles (without loading data)
 
@@ -249,18 +229,11 @@ class QueryExecutor:
             >>> tiles
             ['x0024_y0041', 'x0024_y0042']
         """
-        return self.catalog.list_tiles(
-            bounds=bounds,
-            time_range=time_range,
-            product_id=product_id
-        )
+        return self.catalog.list_tiles(bounds=bounds, time_range=time_range, product_id=product_id)
 
     def get_tile_statistics(
-        self,
-        tile_id: str,
-        band: str,
-        time_range: Optional[Tuple[datetime, datetime]] = None
-    ) -> Dict[str, float]:
+        self, tile_id: str, band: str, time_range: tuple[datetime, datetime] | None = None
+    ) -> dict[str, float]:
         """
         Get pre-computed statistics for a tile-band
 

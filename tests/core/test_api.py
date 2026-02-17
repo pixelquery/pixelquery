@@ -2,12 +2,12 @@
 Tests for public API functions
 """
 
-import pytest
 import numpy as np
+import pytest
 
-from pixelquery.core.api import open_dataset, compute_ndvi, compute_evi
-from pixelquery.core.dataset import Dataset
+from pixelquery.core.api import compute_evi, compute_ndvi, open_dataset
 from pixelquery.core.dataarray import DataArray
+from pixelquery.core.dataset import Dataset
 
 
 class TestOpenDataset:

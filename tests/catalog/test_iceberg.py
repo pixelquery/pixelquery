@@ -2,13 +2,13 @@
 Tests for IcebergCatalog
 """
 
-import pytest
-import tempfile
 import shutil
+import tempfile
+from datetime import UTC, datetime, timezone
 from pathlib import Path
-from datetime import datetime, timezone
 
 import numpy as np
+import pytest
 
 from pixelquery.catalog.iceberg import IcebergCatalog, TileMetadata
 from pixelquery.io.iceberg_writer import IcebergPixelWriter
@@ -40,7 +40,7 @@ class TestIcebergCatalog:
         return {
             "tile_id": "x0024_y0041",
             "band": "red",
-            "time": datetime(2024, 1, 15, tzinfo=timezone.utc),
+            "time": datetime(2024, 1, 15, tzinfo=UTC),
             "pixels": np.array([[100, 200], [300, 400]], dtype=np.uint16),
             "mask": np.array([[True, True], [False, True]], dtype=bool),
             "product_id": "sentinel2_l2a",
@@ -101,17 +101,15 @@ class TestIcebergCatalog:
         """Test listing tiles filtered by time range"""
         # Write observations in different months
         obs1 = sample_observation.copy()
-        obs1["time"] = datetime(2024, 1, 15, tzinfo=timezone.utc)
+        obs1["time"] = datetime(2024, 1, 15, tzinfo=UTC)
         writer.write_observation(**obs1)
 
         obs2 = sample_observation.copy()
-        obs2["time"] = datetime(2024, 3, 15, tzinfo=timezone.utc)
+        obs2["time"] = datetime(2024, 3, 15, tzinfo=UTC)
         writer.write_observation(**obs2)
 
         # Query only January
-        tiles = catalog.list_tiles(
-            time_range=(datetime(2024, 1, 1), datetime(2024, 1, 31))
-        )
+        tiles = catalog.list_tiles(time_range=(datetime(2024, 1, 1), datetime(2024, 1, 31)))
         assert len(tiles) >= 1
         assert "x0024_y0041" in tiles
 
@@ -188,7 +186,7 @@ class TestIcebergCatalog:
         for month in [1, 2, 3]:
             for band in ["red", "nir"]:
                 obs = sample_observation.copy()
-                obs["time"] = datetime(2024, month, 15, tzinfo=timezone.utc)
+                obs["time"] = datetime(2024, month, 15, tzinfo=UTC)
                 obs["band"] = band
                 writer.write_observation(**obs)
 
@@ -213,10 +211,7 @@ class TestIcebergCatalog:
 
         # Query at first snapshot
         metadata_list = catalog.query_metadata(
-            "x0024_y0041",
-            "2024-01",
-            "red",
-            as_of_snapshot_id=snapshot_id1
+            "x0024_y0041", "2024-01", "red", as_of_snapshot_id=snapshot_id1
         )
         assert len(metadata_list) >= 1
 
@@ -226,19 +221,13 @@ class TestIcebergCatalog:
         snapshot_id2 = writer.write_observation(**obs2)
 
         # Query at first snapshot should not see NIR
-        metadata_list = catalog.query_metadata(
-            "x0024_y0041",
-            as_of_snapshot_id=snapshot_id1
-        )
+        metadata_list = catalog.query_metadata("x0024_y0041", as_of_snapshot_id=snapshot_id1)
         bands = [m.band for m in metadata_list]
         assert "red" in bands
         assert "nir" not in bands
 
         # Query at second snapshot should see both
-        metadata_list = catalog.query_metadata(
-            "x0024_y0041",
-            as_of_snapshot_id=snapshot_id2
-        )
+        metadata_list = catalog.query_metadata("x0024_y0041", as_of_snapshot_id=snapshot_id2)
         bands = [m.band for m in metadata_list]
         assert "red" in bands
         assert "nir" in bands
@@ -296,9 +285,10 @@ class TestIcebergCatalog:
         # Write multiple months
         for month in range(1, 4):
             obs = sample_observation.copy()
-            obs["time"] = datetime(2024, month, 15, tzinfo=timezone.utc)
-            obs["pixels"] = np.array([[100 * month, 200 * month],
-                                     [300 * month, 400 * month]], dtype=np.uint16)
+            obs["time"] = datetime(2024, month, 15, tzinfo=UTC)
+            obs["pixels"] = np.array(
+                [[100 * month, 200 * month], [300 * month, 400 * month]], dtype=np.uint16
+            )
             writer.write_observation(**obs)
 
         stats = catalog.get_statistics("x0024_y0041", "red")
@@ -381,7 +371,7 @@ class TestIcebergCatalogIntegration:
                     obs = {
                         "tile_id": tile_id,
                         "band": band,
-                        "time": datetime(2024, month, 15, tzinfo=timezone.utc),
+                        "time": datetime(2024, month, 15, tzinfo=UTC),
                         "pixels": np.array([[100, 200], [300, 400]], dtype=np.uint16),
                         "mask": np.array([[True, True], [False, True]], dtype=bool),
                         "product_id": "sentinel2_l2a",
@@ -421,7 +411,7 @@ class TestIcebergCatalogIntegration:
         obs1 = {
             "tile_id": "x0024_y0041",
             "band": "red",
-            "time": datetime(2024, 1, 15, tzinfo=timezone.utc),
+            "time": datetime(2024, 1, 15, tzinfo=UTC),
             "pixels": np.array([[100, 200], [300, 400]], dtype=np.uint16),
             "mask": np.array([[True, True], [False, True]], dtype=bool),
             "product_id": "sentinel2_l2a",
@@ -440,7 +430,7 @@ class TestIcebergCatalogIntegration:
 
         obs3 = obs1.copy()
         obs3["tile_id"] = "x0025_y0041"
-        snapshot_id3 = writer.write_observation(**obs3)
+        _snapshot_id3 = writer.write_observation(**obs3)
 
         # Current state should have 3 tiles
         current_tiles = catalog.list_tiles()
@@ -464,7 +454,7 @@ class TestIcebergCatalogIntegration:
         obs1 = {
             "tile_id": "x0024_y0041",
             "band": "red",
-            "time": datetime(2024, 1, 15, tzinfo=timezone.utc),
+            "time": datetime(2024, 1, 15, tzinfo=UTC),
             "pixels": np.array([[100, 200], [300, 400]], dtype=np.uint16),
             "mask": np.array([[True, True], [False, True]], dtype=bool),
             "product_id": "sentinel2_l2a",

@@ -1,0 +1,75 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  # Run full test suite before releasing
+  test:
+    name: Test before release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: |
+          pip install --upgrade pip
+          pip install -e ".[icechunk,legacy,dev]"
+      - run: pytest tests/ -x -q
+
+  build:
+    name: Build
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install build
+      - run: python -m build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  # Publish to PyPI using Trusted Publisher (no API token needed)
+  pypi:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/pixelquery
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  # Create GitHub Release with changelog
+  github-release:
+    name: GitHub Release
+    needs: pypi
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: dist/*

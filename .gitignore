@@ -42,3 +42,28 @@ warehouse/
 test_warehouse/
 *.arrow
 *.parquet
+
+# Rust build artifacts
+pixelquery_core/target/
+*.dylib
+
+# OS files
+.DS_Store
+
+# Icechunk test repos
+.icechunk/
+*/.icechunk/
+
+# Sample data cache
+sample_data_cache/
+
+# Agent state
+.sisyphus/
+.claude/
+.omc/
+
+# Ruff
+.ruff_cache/
+
+# Lock files (project uses hatch)
+uv.lock

@@ -2,16 +2,16 @@
 Tests for RecoveryTool
 """
 
-import pytest
-import tempfile
 import shutil
+import tempfile
+from datetime import UTC, datetime, timezone
 from pathlib import Path
-from datetime import datetime, timezone
 
 import numpy as np
+import pytest
 
-from pixelquery.util.recovery import RecoveryTool
 from pixelquery.io.iceberg_writer import IcebergPixelWriter
+from pixelquery.util.recovery import RecoveryTool
 
 
 class TestRecoveryTool:
@@ -101,7 +101,7 @@ class TestRecoveryTool:
         writer.write_observation(
             tile_id="x0024_y0041",
             band="red",
-            time=datetime(2024, 1, 15, tzinfo=timezone.utc),
+            time=datetime(2024, 1, 15, tzinfo=UTC),
             pixels=np.array([[100, 200], [300, 400]], dtype=np.uint16),
             mask=np.array([[True, True], [False, True]], dtype=bool),
             product_id="sentinel2_l2a",
@@ -169,7 +169,7 @@ class TestRecoveryTool:
         writer.write_observation(
             tile_id="x0024_y0041",
             band="red",
-            time=datetime(2024, 1, 15, tzinfo=timezone.utc),
+            time=datetime(2024, 1, 15, tzinfo=UTC),
             pixels=np.array([[100, 200], [300, 400]], dtype=np.uint16),
             mask=np.array([[True, True], [False, True]], dtype=bool),
             product_id="sentinel2_l2a",
@@ -220,7 +220,7 @@ class TestRecoveryTool:
         writer.write_observation(
             tile_id="x0024_y0041",
             band="red",
-            time=datetime(2024, 1, 15, tzinfo=timezone.utc),
+            time=datetime(2024, 1, 15, tzinfo=UTC),
             pixels=np.array([[100, 200], [300, 400]], dtype=np.uint16),
             mask=np.array([[True, True], [False, True]], dtype=bool),
             product_id="sentinel2_l2a",
@@ -291,7 +291,7 @@ class TestRecoveryToolIntegration:
         writer.write_observation(
             tile_id="x0024_y0041",
             band="red",
-            time=datetime(2024, 1, 15, tzinfo=timezone.utc),
+            time=datetime(2024, 1, 15, tzinfo=UTC),
             pixels=np.array([[100, 200], [300, 400]], dtype=np.uint16),
             mask=np.array([[True, True], [False, True]], dtype=bool),
             product_id="sentinel2_l2a",
@@ -326,7 +326,7 @@ class TestRecoveryToolIntegration:
         writer.write_observation(
             tile_id="x0024_y0041",
             band="red",
-            time=datetime(2024, 1, 15, tzinfo=timezone.utc),
+            time=datetime(2024, 1, 15, tzinfo=UTC),
             pixels=np.array([[100, 200], [300, 400]], dtype=np.uint16),
             mask=np.array([[True, True], [False, True]], dtype=bool),
             product_id="sentinel2_l2a",

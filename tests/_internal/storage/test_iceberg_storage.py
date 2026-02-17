@@ -2,14 +2,14 @@
 Tests for IcebergStorageManager
 """
 
-import pytest
-import tempfile
 import shutil
+import tempfile
+from datetime import UTC, datetime, timezone
 from pathlib import Path
-from datetime import datetime, timezone
 
-import pyarrow as pa
 import numpy as np
+import pyarrow as pa
+import pytest
 
 from pixelquery._internal.storage.iceberg_storage import IcebergStorageManager
 
@@ -43,7 +43,7 @@ class TestIcebergStorageManager:
             "tile_id": ["x0024_y0041"],
             "band": ["red"],
             "year_month": ["2024-01"],
-            "time": [datetime(2024, 1, 15, tzinfo=timezone.utc)],
+            "time": [datetime(2024, 1, 15, tzinfo=UTC)],
             "pixels": [[100, 200, 300, 400]],
             "mask": [[True, True, False, True]],
             "product_id": ["sentinel2_l2a"],
@@ -57,7 +57,7 @@ class TestIcebergStorageManager:
             "crs": ["EPSG:32632"],
             "transform": [None],
             "source_file": [None],
-            "ingestion_time": [datetime.now(timezone.utc)],
+            "ingestion_time": [datetime.now(UTC)],
         }
 
         return pa.Table.from_pydict(data, schema=iceberg_schema)
@@ -318,11 +318,12 @@ class TestIcebergStorageManager:
         # Use a timestamp in the future to ensure all snapshots are "old enough"
         # This is a calculation-only method, not actual expiration
         from datetime import datetime, timezone
-        future_timestamp_ms = int((datetime.now(timezone.utc).timestamp() + 3600) * 1000)
+
+        future_timestamp_ms = int((datetime.now(UTC).timestamp() + 3600) * 1000)
 
         expired_count = storage.expire_snapshots(
             older_than_ms=future_timestamp_ms,  # All current snapshots are older than this
-            retain_last=10
+            retain_last=10,
         )
 
         # Should calculate 5 to expire (15 total - 10 to retain)
@@ -347,47 +348,53 @@ class TestIcebergStorageManagerIntegration:
         # Create sample data
         schema = storage.table.schema().as_arrow()
 
-        data1 = pa.Table.from_pydict({
-            "tile_id": ["x0024_y0041"],
-            "band": ["red"],
-            "year_month": ["2024-01"],
-            "time": [datetime(2024, 1, 15, tzinfo=timezone.utc)],
-            "pixels": [[100, 200, 300, 400]],
-            "mask": [[True, True, False, True]],
-            "product_id": ["sentinel2_l2a"],
-            "resolution": [10.0],
-            "bounds_wkb": [None],
-            "num_pixels": [4],
-            "min_value": [100.0],
-            "max_value": [300.0],
-            "mean_value": [200.0],
-            "cloud_cover": [0.1],
-            "crs": ["EPSG:32632"],
-            "transform": [None],
-            "source_file": [None],
-            "ingestion_time": [datetime.now(timezone.utc)],
-        }, schema=schema)
+        data1 = pa.Table.from_pydict(
+            {
+                "tile_id": ["x0024_y0041"],
+                "band": ["red"],
+                "year_month": ["2024-01"],
+                "time": [datetime(2024, 1, 15, tzinfo=UTC)],
+                "pixels": [[100, 200, 300, 400]],
+                "mask": [[True, True, False, True]],
+                "product_id": ["sentinel2_l2a"],
+                "resolution": [10.0],
+                "bounds_wkb": [None],
+                "num_pixels": [4],
+                "min_value": [100.0],
+                "max_value": [300.0],
+                "mean_value": [200.0],
+                "cloud_cover": [0.1],
+                "crs": ["EPSG:32632"],
+                "transform": [None],
+                "source_file": [None],
+                "ingestion_time": [datetime.now(UTC)],
+            },
+            schema=schema,
+        )
 
-        data2 = pa.Table.from_pydict({
-            "tile_id": ["x0024_y0041"],
-            "band": ["nir"],
-            "year_month": ["2024-01"],
-            "time": [datetime(2024, 1, 15, tzinfo=timezone.utc)],
-            "pixels": [[500, 600, 700, 800]],
-            "mask": [[True, True, True, False]],
-            "product_id": ["sentinel2_l2a"],
-            "resolution": [10.0],
-            "bounds_wkb": [None],
-            "num_pixels": [4],
-            "min_value": [500.0],
-            "max_value": [700.0],
-            "mean_value": [600.0],
-            "cloud_cover": [0.1],
-            "crs": ["EPSG:32632"],
-            "transform": [None],
-            "source_file": [None],
-            "ingestion_time": [datetime.now(timezone.utc)],
-        }, schema=schema)
+        data2 = pa.Table.from_pydict(
+            {
+                "tile_id": ["x0024_y0041"],
+                "band": ["nir"],
+                "year_month": ["2024-01"],
+                "time": [datetime(2024, 1, 15, tzinfo=UTC)],
+                "pixels": [[500, 600, 700, 800]],
+                "mask": [[True, True, True, False]],
+                "product_id": ["sentinel2_l2a"],
+                "resolution": [10.0],
+                "bounds_wkb": [None],
+                "num_pixels": [4],
+                "min_value": [500.0],
+                "max_value": [700.0],
+                "mean_value": [600.0],
+                "cloud_cover": [0.1],
+                "crs": ["EPSG:32632"],
+                "transform": [None],
+                "source_file": [None],
+                "ingestion_time": [datetime.now(UTC)],
+            },
+            schema=schema,
+        )
 
         # Write data
         snapshot_id1 = storage.append_data(data1)
@@ -411,26 +418,29 @@ class TestIcebergStorageManagerIntegration:
         storage1.initialize()
 
         schema = storage1.table.schema().as_arrow()
-        data = pa.Table.from_pydict({
-            "tile_id": ["x0024_y0041"],
-            "band": ["red"],
-            "year_month": ["2024-01"],
-            "time": [datetime(2024, 1, 15, tzinfo=timezone.utc)],
-            "pixels": [[100, 200, 300, 400]],
-            "mask": [[True, True, False, True]],
-            "product_id": ["sentinel2_l2a"],
-            "resolution": [10.0],
-            "bounds_wkb": [None],
-            "num_pixels": [4],
-            "min_value": [100.0],
-            "max_value": [300.0],
-            "mean_value": [200.0],
-            "cloud_cover": [0.1],
-            "crs": ["EPSG:32632"],
-            "transform": [None],
-            "source_file": [None],
-            "ingestion_time": [datetime.now(timezone.utc)],
-        }, schema=schema)
+        data = pa.Table.from_pydict(
+            {
+                "tile_id": ["x0024_y0041"],
+                "band": ["red"],
+                "year_month": ["2024-01"],
+                "time": [datetime(2024, 1, 15, tzinfo=UTC)],
+                "pixels": [[100, 200, 300, 400]],
+                "mask": [[True, True, False, True]],
+                "product_id": ["sentinel2_l2a"],
+                "resolution": [10.0],
+                "bounds_wkb": [None],
+                "num_pixels": [4],
+                "min_value": [100.0],
+                "max_value": [300.0],
+                "mean_value": [200.0],
+                "cloud_cover": [0.1],
+                "crs": ["EPSG:32632"],
+                "transform": [None],
+                "source_file": [None],
+                "ingestion_time": [datetime.now(UTC)],
+            },
+            schema=schema,
+        )
 
         snapshot_id = storage1.append_data(data)
 

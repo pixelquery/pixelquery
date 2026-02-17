@@ -4,7 +4,6 @@ Landsat-8 Product Profile
 Implements ProductProfile for Landsat-8 Collection 2 Level-2 (Surface Reflectance) data.
 """
 
-from typing import Dict
 from dataclasses import dataclass
 
 
@@ -20,6 +19,7 @@ class Landsat8BandInfo:
         resolution: Native spatial resolution in meters (30m)
         bandwidth: Spectral bandwidth in nanometers
     """
+
     native_name: str
     standard_name: str
     wavelength: float
@@ -74,64 +74,68 @@ class Landsat8L2:
     nodata: int = 0
 
     # Band specifications (immutable)
-    bands: Dict[str, Landsat8BandInfo] = None
+    bands: dict[str, Landsat8BandInfo] = None
 
     def __post_init__(self):
         """Initialize band definitions"""
         if self.bands is None:
             # Use object.__setattr__ because dataclass is frozen
-            object.__setattr__(self, 'bands', {
-                # All bands at 30m resolution
-                'coastal': Landsat8BandInfo(
-                    native_name='B1',
-                    standard_name='coastal',
-                    wavelength=443.0,
-                    resolution=30.0,
-                    bandwidth=16.0
-                ),
-                'blue': Landsat8BandInfo(
-                    native_name='B2',
-                    standard_name='blue',
-                    wavelength=482.0,
-                    resolution=30.0,
-                    bandwidth=60.0
-                ),
-                'green': Landsat8BandInfo(
-                    native_name='B3',
-                    standard_name='green',
-                    wavelength=562.0,
-                    resolution=30.0,
-                    bandwidth=57.0
-                ),
-                'red': Landsat8BandInfo(
-                    native_name='B4',
-                    standard_name='red',
-                    wavelength=655.0,
-                    resolution=30.0,
-                    bandwidth=37.0
-                ),
-                'nir': Landsat8BandInfo(
-                    native_name='B5',
-                    standard_name='nir',
-                    wavelength=865.0,
-                    resolution=30.0,
-                    bandwidth=28.0
-                ),
-                'swir_1': Landsat8BandInfo(
-                    native_name='B6',
-                    standard_name='swir_1',
-                    wavelength=1610.0,
-                    resolution=30.0,
-                    bandwidth=85.0
-                ),
-                'swir_2': Landsat8BandInfo(
-                    native_name='B7',
-                    standard_name='swir_2',
-                    wavelength=2200.0,
-                    resolution=30.0,
-                    bandwidth=187.0
-                ),
-            })
+            object.__setattr__(
+                self,
+                "bands",
+                {
+                    # All bands at 30m resolution
+                    "coastal": Landsat8BandInfo(
+                        native_name="B1",
+                        standard_name="coastal",
+                        wavelength=443.0,
+                        resolution=30.0,
+                        bandwidth=16.0,
+                    ),
+                    "blue": Landsat8BandInfo(
+                        native_name="B2",
+                        standard_name="blue",
+                        wavelength=482.0,
+                        resolution=30.0,
+                        bandwidth=60.0,
+                    ),
+                    "green": Landsat8BandInfo(
+                        native_name="B3",
+                        standard_name="green",
+                        wavelength=562.0,
+                        resolution=30.0,
+                        bandwidth=57.0,
+                    ),
+                    "red": Landsat8BandInfo(
+                        native_name="B4",
+                        standard_name="red",
+                        wavelength=655.0,
+                        resolution=30.0,
+                        bandwidth=37.0,
+                    ),
+                    "nir": Landsat8BandInfo(
+                        native_name="B5",
+                        standard_name="nir",
+                        wavelength=865.0,
+                        resolution=30.0,
+                        bandwidth=28.0,
+                    ),
+                    "swir_1": Landsat8BandInfo(
+                        native_name="B6",
+                        standard_name="swir_1",
+                        wavelength=1610.0,
+                        resolution=30.0,
+                        bandwidth=85.0,
+                    ),
+                    "swir_2": Landsat8BandInfo(
+                        native_name="B7",
+                        standard_name="swir_2",
+                        wavelength=2200.0,
+                        resolution=30.0,
+                        bandwidth=187.0,
+                    ),
+                },
+            )
 
     def get_band_by_native_name(self, native_name: str) -> Landsat8BandInfo:
         """
@@ -157,7 +161,7 @@ class Landsat8L2:
                 return band_info
         raise KeyError(f"Band '{native_name}' not found in Landsat-8 profile")
 
-    def get_common_bands(self) -> Dict[str, Landsat8BandInfo]:
+    def get_common_bands(self) -> dict[str, Landsat8BandInfo]:
         """
         Get common bands for vegetation analysis (blue, green, red, nir)
 
@@ -165,8 +169,9 @@ class Landsat8L2:
             Dictionary of common bands
         """
         return {
-            name: band for name, band in self.bands.items()
-            if name in ['blue', 'green', 'red', 'nir']
+            name: band
+            for name, band in self.bands.items()
+            if name in ["blue", "green", "red", "nir"]
         }
 
     def __repr__(self) -> str:

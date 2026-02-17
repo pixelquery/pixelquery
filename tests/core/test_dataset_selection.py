@@ -2,9 +2,10 @@
 Tests for Dataset selection methods (sel, isel)
 """
 
-import pytest
 from datetime import datetime
+
 import numpy as np
+import pytest
 
 from pixelquery.core.dataset import Dataset
 
@@ -23,8 +24,8 @@ class TestDatasetSel:
                 "red": np.array([1, 2, 3]),
                 "green": np.array([4, 5, 6]),
                 "blue": np.array([7, 8, 9]),
-                "nir": np.array([10, 11, 12])
-            }
+                "nir": np.array([10, 11, 12]),
+            },
         )
 
     def test_sel_bands_single(self, sample_dataset):
@@ -79,10 +80,7 @@ class TestDatasetSel:
 
     def test_sel_combined(self, sample_dataset):
         """Test combined time and band selection"""
-        result = sample_dataset.sel(
-            time=slice("2024-01", "2024-06"),
-            bands=["red", "nir"]
-        )
+        result = sample_dataset.sel(time=slice("2024-01", "2024-06"), bands=["red", "nir"])
 
         assert result.bands == ["red", "nir"]
         assert len(result.data) == 2
@@ -141,7 +139,7 @@ class TestDatasetIsel:
             tile_id="x0024_y0041",
             time_range=(datetime(2024, 1, 1), datetime(2024, 12, 31)),
             bands=["red", "nir"],
-            data={"red": np.array([1, 2, 3]), "nir": np.array([4, 5, 6])}
+            data={"red": np.array([1, 2, 3]), "nir": np.array([4, 5, 6])},
         )
 
     def test_isel_single_index(self, sample_dataset):
@@ -149,16 +147,16 @@ class TestDatasetIsel:
         result = sample_dataset.isel(time=0)
 
         assert isinstance(result, Dataset)
-        assert 'indexers' in result.metadata
-        assert result.metadata['indexers']['time'] == 0
+        assert "indexers" in result.metadata
+        assert result.metadata["indexers"]["time"] == 0
 
     def test_isel_slice(self, sample_dataset):
         """Test integer selection with slice"""
         result = sample_dataset.isel(time=slice(0, 10))
 
         assert isinstance(result, Dataset)
-        assert 'indexers' in result.metadata
-        assert isinstance(result.metadata['indexers']['time'], slice)
+        assert "indexers" in result.metadata
+        assert isinstance(result.metadata["indexers"]["time"], slice)
 
     def test_isel_preserves_data(self, sample_dataset):
         """Test that isel preserves original data"""
@@ -184,15 +182,13 @@ class TestDatasetChaining:
                 "red": np.array([1, 2, 3]),
                 "green": np.array([4, 5, 6]),
                 "blue": np.array([7, 8, 9]),
-                "nir": np.array([10, 11, 12])
-            }
+                "nir": np.array([10, 11, 12]),
+            },
         )
 
     def test_chain_sel_sel(self, sample_dataset):
         """Test chaining multiple sel() calls"""
-        result = (sample_dataset
-                  .sel(time=slice("2024-01", "2024-06"))
-                  .sel(bands=["red", "nir"]))
+        result = sample_dataset.sel(time=slice("2024-01", "2024-06")).sel(bands=["red", "nir"])
 
         assert result.bands == ["red", "nir"]
         start, end = result.time_range
@@ -201,9 +197,7 @@ class TestDatasetChaining:
 
     def test_chain_sel_isel(self, sample_dataset):
         """Test chaining sel() and isel()"""
-        result = (sample_dataset
-                  .sel(bands=["red"])
-                  .isel(time=0))
+        result = sample_dataset.sel(bands=["red"]).isel(time=0)
 
         assert result.bands == ["red"]
-        assert 'indexers' in result.metadata
+        assert "indexers" in result.metadata

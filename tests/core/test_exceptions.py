@@ -5,10 +5,10 @@ Tests for exceptions
 import pytest
 
 from pixelquery.core.exceptions import (
-    PixelQueryError,
-    TransactionError,
     IngestionError,
+    PixelQueryError,
     QueryError,
+    TransactionError,
     ValidationError,
 )
 

@@ -4,7 +4,7 @@ Product Profile and Band Information Protocols
 Defines satellite product specifications to enable multi-resolution fusion.
 """
 
-from typing import Protocol, Dict, Optional
+from typing import Protocol
 
 
 class BandInfo(Protocol):
@@ -18,11 +18,12 @@ class BandInfo(Protocol):
         resolution: Native spatial resolution in meters
         bandwidth: Spectral bandwidth in nanometers (optional)
     """
+
     native_name: str
     standard_name: str
     wavelength: float
     resolution: float
-    bandwidth: Optional[float]
+    bandwidth: float | None
 
 
 class ProductProfile(Protocol):
@@ -42,11 +43,12 @@ class ProductProfile(Protocol):
         offset: Additive offset for conversion
         nodata: No-data pixel value
     """
+
     product_id: str
     provider: str
     sensor: str
     native_resolution: float
-    bands: Dict[str, BandInfo]
+    bands: dict[str, BandInfo]
     scale_factor: float
     offset: float
     nodata: int

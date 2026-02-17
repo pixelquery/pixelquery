@@ -8,12 +8,12 @@ Supports two storage backends:
 - Iceberg (default): Uses Apache Iceberg tables with ACID transactions and Time Travel
 """
 
-from typing import Optional, List, Tuple, Any, Dict
-from datetime import datetime
 import logging
+from datetime import datetime
+from typing import Any
 
-from pixelquery.core.dataset import Dataset
 from pixelquery.core.dataarray import DataArray
+from pixelquery.core.dataset import Dataset
 
 logger = logging.getLogger(__name__)
 
@@ -21,11 +21,11 @@ logger = logging.getLogger(__name__)
 def open_dataset(
     warehouse_path: str,
     tile_id: str,
-    time_range: Optional[Tuple[datetime, datetime]] = None,
-    bands: Optional[List[str]] = None,
-    as_of_snapshot_id: Optional[int] = None,
+    time_range: tuple[datetime, datetime] | None = None,
+    bands: list[str] | None = None,
+    as_of_snapshot_id: int | None = None,
     storage_backend: str = "auto",
-    **kwargs
+    **kwargs,
 ) -> Dataset:
     """
     Open satellite imagery dataset for a tile (xarray.open_dataset-like)
@@ -72,13 +72,27 @@ def open_dataset(
         >>> # Compute NDVI
         >>> ndvi = (nir - red) / (nir + red)
     """
+    from pathlib import Path
+
     from pixelquery.catalog import LocalCatalog
+
+    # Check if Icechunk repository
+    if (Path(warehouse_path) / ".icechunk").exists() and storage_backend in ("auto", "icechunk"):
+        logger.info("Detected Icechunk repository, use open_xarray() for best experience")
+        # Route to open_xarray and wrap result
+        xr_ds = open_xarray(warehouse_path, time_range=time_range, bands=bands, **kwargs)
+        return Dataset(
+            tile_id=tile_id or "icechunk",
+            time_range=time_range,
+            bands=bands or [],
+            data={"xarray": xr_ds},
+            metadata={"warehouse_path": warehouse_path, "storage_backend": "icechunk"},
+        )
 
     # Auto-detect or use specified backend
     catalog = LocalCatalog.create(warehouse_path, backend=storage_backend)
 
     # Determine if Iceberg backend
-    from pathlib import Path
     use_iceberg = (Path(warehouse_path) / "catalog.db").exists() or storage_backend == "iceberg"
 
     if use_iceberg:
@@ -139,7 +153,7 @@ def open_dataset(
             for meta in metadata_list:
                 chunk_path = Path(warehouse_path) / meta.chunk_path
                 if chunk_path.exists():
-                    chunk_data, chunk_meta = reader.read_chunk(str(chunk_path))
+                    chunk_data, _chunk_meta = reader.read_chunk(str(chunk_path))
                     times_list.extend(chunk_data.get("time", []))
                     pixels_list.extend(chunk_data.get("pixels", []))
                     masks_list.extend(chunk_data.get("mask", []))
@@ -163,12 +177,96 @@ def open_dataset(
         )
 
 
+def open_xarray(
+    repo_path: str,
+    time_range: tuple[datetime, datetime] | None = None,
+    bounds: tuple[float, float, float, float] | None = None,
+    bands: list[str] | None = None,
+    product_id: str | None = None,
+    snapshot_id: str | None = None,
+    cloud_mask: bool = False,
+    **kwargs,
+):
+    """
+    Open Icechunk virtual zarr datasets as a lazy xarray.Dataset.
+
+    This is the primary query interface for Icechunk-backed warehouses.
+    Returns a lazy xarray.Dataset with dimensions (time, band, y, x).
+    Actual COG byte reads happen only when .compute() or .values is called.
+
+    Args:
+        repo_path: Path to the Icechunk repository root directory
+        time_range: (start, end) datetime range filter
+        bounds: (minx, miny, maxx, maxy) spatial intersection filter
+        bands: Band name filter (e.g., ["red", "nir"])
+        product_id: Product identifier filter
+        snapshot_id: Icechunk snapshot ID for Time Travel queries
+        **kwargs: Passed to IcechunkStorageManager (vcc_prefix, vcc_data_path, etc.)
+
+    Returns:
+        xr.Dataset with dims (time, band, y, x) if multiple scenes,
+        or (band, y, x) if single scene
+
+    Raises:
+        ValueError: If no scenes match the query filters
+        ImportError: If icechunk dependencies are not installed
+
+    Examples:
+        >>> import pixelquery as pq
+        >>>
+        >>> # Open all scenes
+        >>> ds = pq.open_xarray("./warehouse")
+        >>> print(ds)  # (time: 243, band: 4, y: 874, x: 3519)
+        >>>
+        >>> # NDVI computation
+        >>> ndvi = (ds["data"].sel(band="nir") - ds["data"].sel(band="red")) / \\
+        ...        (ds["data"].sel(band="nir") + ds["data"].sel(band="red"))
+        >>>
+        >>> # Time Travel
+        >>> ds_old = pq.open_xarray("./warehouse", snapshot_id="abc123")
+        >>>
+        >>> # Filter by time range and bands
+        >>> from datetime import datetime
+        >>> ds = pq.open_xarray(
+        ...     "./warehouse",
+        ...     time_range=(datetime(2025, 1, 1), datetime(2025, 6, 30)),
+        ...     bands=["red", "nir"],
+        ... )
+    """
+    try:
+        from pixelquery._internal.storage.icechunk_storage import IcechunkStorageManager
+        from pixelquery.io.icechunk_reader import IcechunkVirtualReader
+    except ImportError as e:
+        raise ImportError(
+            "Icechunk dependencies not installed. Install with: pip install pixelquery[icechunk]"
+        ) from e
+
+    # Extract storage manager kwargs
+    sm_kwargs = {}
+    for key in ("vcc_prefix", "vcc_data_path", "storage_type", "storage_config"):
+        if key in kwargs:
+            sm_kwargs[key] = kwargs.pop(key)
+
+    storage = IcechunkStorageManager(repo_path, **sm_kwargs)
+    storage.initialize()
+
+    reader = IcechunkVirtualReader(storage)
+    return reader.open_xarray(
+        time_range=time_range,
+        bounds=bounds,
+        bands=bands,
+        product_id=product_id,
+        snapshot_id=snapshot_id,
+        cloud_mask=cloud_mask,
+    )
+
+
 def open_mfdataset(
     warehouse_path: str,
-    tile_ids: List[str],
-    time_range: Optional[Tuple[datetime, datetime]] = None,
-    bands: Optional[List[str]] = None,
-    **kwargs
+    tile_ids: list[str],
+    time_range: tuple[datetime, datetime] | None = None,
+    bands: list[str] | None = None,
+    **kwargs,
 ) -> Dataset:
     """
     Open multiple tiles as a single dataset (xarray.open_mfdataset-like)
@@ -196,11 +294,11 @@ def open_mfdataset(
 
 def list_tiles(
     warehouse_path: str,
-    bounds: Optional[Tuple[float, float, float, float]] = None,
-    time_range: Optional[Tuple[datetime, datetime]] = None,
-    as_of_snapshot_id: Optional[int] = None,
+    bounds: tuple[float, float, float, float] | None = None,
+    time_range: tuple[datetime, datetime] | None = None,
+    as_of_snapshot_id: int | None = None,
     storage_backend: str = "auto",
-) -> List[str]:
+) -> list[str]:
     """
     List available tiles
 
@@ -228,8 +326,8 @@ def list_tiles(
     catalog = LocalCatalog.create(warehouse_path, backend=storage_backend)
 
     # Check if Iceberg catalog with Time Travel support
-    if hasattr(catalog, 'list_tiles'):
-        if as_of_snapshot_id and hasattr(catalog, 'get_snapshot_history'):
+    if hasattr(catalog, "list_tiles"):
+        if as_of_snapshot_id and hasattr(catalog, "get_snapshot_history"):
             # IcebergCatalog with Time Travel
             return catalog.list_tiles(
                 bounds=bounds,
@@ -245,7 +343,7 @@ def list_tiles(
 def get_snapshot_history(
     warehouse_path: str,
     storage_backend: str = "auto",
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Get snapshot history for Time Travel queries
 
@@ -276,7 +374,7 @@ def get_snapshot_history(
 
     catalog = LocalCatalog.create(warehouse_path, backend=storage_backend)
 
-    if hasattr(catalog, 'get_snapshot_history'):
+    if hasattr(catalog, "get_snapshot_history"):
         return catalog.get_snapshot_history()
     else:
         logger.warning("Snapshot history only available for Iceberg backend")
@@ -286,7 +384,7 @@ def get_snapshot_history(
 def get_current_snapshot_id(
     warehouse_path: str,
     storage_backend: str = "auto",
-) -> Optional[int]:
+) -> int | None:
     """
     Get the current snapshot ID
 
@@ -307,7 +405,7 @@ def get_current_snapshot_id(
 
     catalog = LocalCatalog.create(warehouse_path, backend=storage_backend)
 
-    if hasattr(catalog, 'get_current_snapshot_id'):
+    if hasattr(catalog, "get_current_snapshot_id"):
         return catalog.get_current_snapshot_id()
     else:
         return None

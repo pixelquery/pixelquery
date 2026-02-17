@@ -16,13 +16,12 @@ numpy = "0.22"
 ndarray = "0.16"
 rayon = "1.10"  # For parallel processing
 
-# Arrow integration (for Phase 2.2)
-# arrow = { version = "53", optional = true }
-# parquet = { version = "53", optional = true }
+# Arrow integration (Phase 2.2)
+arrow = { version = "53", default-features = false, features = ["ipc"] }
+chrono = "0.4"
 
 [features]
 default = []
-# arrow = ["dep:arrow", "dep:parquet"]
 
 [profile.release]
 opt-level = 3

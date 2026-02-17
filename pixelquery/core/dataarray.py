@@ -4,7 +4,8 @@ DataArray class - xarray-inspired API for single band data
 Represents a single satellite band with labeled dimensions.
 """
 
-from typing import Optional, Dict, Union, Any
+from typing import Any, Union
+
 import numpy as np
 from numpy.typing import NDArray
 
@@ -40,10 +41,10 @@ class DataArray:
     def __init__(
         self,
         name: str,
-        data: Optional[NDArray] = None,
-        dims: Optional[Dict[str, int]] = None,
-        coords: Optional[Dict[str, NDArray]] = None,
-        attrs: Optional[Dict[str, Any]] = None,
+        data: NDArray | None = None,
+        dims: dict[str, int] | None = None,
+        coords: dict[str, NDArray] | None = None,
+        attrs: dict[str, Any] | None = None,
     ):
         """
         Initialize DataArray
@@ -108,14 +109,22 @@ class DataArray:
                 raise KeyError(f"Dimension '{dim}' not found. Available: {list(self.dims.keys())}")
 
             if dim not in self.coords:
-                raise KeyError(f"No coordinates for dimension '{dim}'. Use isel() for integer indexing.")
+                raise KeyError(
+                    f"No coordinates for dimension '{dim}'. Use isel() for integer indexing."
+                )
 
             coord = self.coords[dim]
 
             if isinstance(value, slice):
                 # Handle slice
-                start_idx = self._find_nearest_index(coord, value.start) if value.start is not None else None
-                stop_idx = self._find_nearest_index(coord, value.stop) if value.stop is not None else None
+                start_idx = (
+                    self._find_nearest_index(coord, value.start)
+                    if value.start is not None
+                    else None
+                )
+                stop_idx = (
+                    self._find_nearest_index(coord, value.stop) if value.stop is not None else None
+                )
                 if stop_idx is not None:
                     stop_idx += 1  # Include the stop value
                 integer_indexers[dim] = slice(start_idx, stop_idx, value.step)
@@ -134,8 +143,8 @@ class DataArray:
         if np.issubdtype(coord.dtype, np.datetime64):
             if isinstance(value, str):
                 value = np.datetime64(value)
-            coord_numeric = coord.astype('datetime64[ns]').astype(np.int64)
-            value_numeric = np.datetime64(value).astype('datetime64[ns]').astype(np.int64)
+            coord_numeric = coord.astype("datetime64[ns]").astype(np.int64)
+            value_numeric = np.datetime64(value).astype("datetime64[ns]").astype(np.int64)
             return int(np.argmin(np.abs(coord_numeric - value_numeric)))
 
         # Numeric coordinates
@@ -160,7 +169,7 @@ class DataArray:
         new_dims = {}
         new_coords = {}
 
-        for i, dim in enumerate(dim_names):
+        for _, dim in enumerate(dim_names):
             if dim in indexers:
                 idx = indexers[dim]
                 index_tuple.append(idx)
@@ -195,7 +204,7 @@ class DataArray:
             attrs=self.attrs.copy(),
         )
 
-    def mean(self, dim: Optional[Union[str, list]] = None) -> Union["DataArray", float]:
+    def mean(self, dim: str | list | None = None) -> Union["DataArray", float]:
         """
         Compute mean along dimension
 
@@ -217,15 +226,15 @@ class DataArray:
         """
         return self._reduce_op(np.mean, dim)
 
-    def max(self, dim: Optional[Union[str, list]] = None) -> Union["DataArray", float]:
+    def max(self, dim: str | list | None = None) -> Union["DataArray", float]:
         """Compute maximum along dimension"""
         return self._reduce_op(np.max, dim)
 
-    def min(self, dim: Optional[Union[str, list]] = None) -> Union["DataArray", float]:
+    def min(self, dim: str | list | None = None) -> Union["DataArray", float]:
         """Compute minimum along dimension"""
         return self._reduce_op(np.min, dim)
 
-    def _reduce_op(self, op, dim: Optional[Union[str, list]] = None) -> Union["DataArray", float]:
+    def _reduce_op(self, op, dim: str | list | None = None) -> Union["DataArray", float]:
         """Apply reduction operation along dimension(s)"""
         if dim is None:
             # Reduce all dimensions
@@ -266,11 +275,11 @@ class DataArray:
             attrs=self.attrs.copy(),
         )
 
-    def median(self, dim: Optional[str] = None) -> Union["DataArray", float]:
+    def median(self, dim: str | None = None) -> Union["DataArray", float]:
         """Compute median along dimension"""
         raise NotImplementedError("median() will be implemented in Phase 2+")
 
-    def std(self, dim: Optional[str] = None) -> Union["DataArray", float]:
+    def std(self, dim: str | None = None) -> Union["DataArray", float]:
         """Compute standard deviation along dimension"""
         raise NotImplementedError("std() will be implemented in Phase 2+")
 
@@ -377,11 +386,11 @@ class DataArray:
         )
 
     # Reverse operations (for scalar * DataArray)
-    def __radd__(self, other: Union[float, NDArray]) -> "DataArray":
+    def __radd__(self, other: float | NDArray) -> "DataArray":
         """Reverse addition"""
         return self + other
 
-    def __rsub__(self, other: Union[float, NDArray]) -> "DataArray":
+    def __rsub__(self, other: float | NDArray) -> "DataArray":
         """Reverse subtraction"""
         result_data = other - self.data
         return DataArray(
@@ -391,11 +400,11 @@ class DataArray:
             coords=self.coords,
         )
 
-    def __rmul__(self, other: Union[float, NDArray]) -> "DataArray":
+    def __rmul__(self, other: float | NDArray) -> "DataArray":
         """Reverse multiplication"""
         return self * other
 
-    def __rtruediv__(self, other: Union[float, NDArray]) -> "DataArray":
+    def __rtruediv__(self, other: float | NDArray) -> "DataArray":
         """Reverse division"""
         result_data = other / self.data
         return DataArray(

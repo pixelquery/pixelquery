@@ -10,27 +10,22 @@ Features:
 - Band-specific queries
 """
 
-from typing import Optional, List, Dict, Tuple, Any
-from datetime import datetime, timezone
-from pathlib import Path
 import logging
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
 
+import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
-import numpy as np
-from numpy.typing import NDArray
-
 from pyiceberg.expressions import (
     And,
-    Or,
     EqualTo,
     GreaterThanOrEqual,
     LessThanOrEqual,
-    In,
 )
 
 from pixelquery._internal.storage.iceberg_storage import IcebergStorageManager
-from pixelquery._internal.storage.iceberg_schema import TILE_SIZE_PIXELS
 
 logger = logging.getLogger(__name__)
 
@@ -85,11 +80,11 @@ class IcebergPixelReader:
     def read_tile(
         self,
         tile_id: str,
-        bands: Optional[List[str]] = None,
-        time_range: Optional[Tuple[datetime, datetime]] = None,
-        as_of_snapshot_id: Optional[int] = None,
-        reshape: Optional[Tuple[int, int]] = None,
-    ) -> Dict[str, Any]:
+        bands: list[str] | None = None,
+        time_range: tuple[datetime, datetime] | None = None,
+        as_of_snapshot_id: int | None = None,
+        reshape: tuple[int, int] | None = None,
+    ) -> dict[str, Any]:
         """
         Read pixel data for a tile
 
@@ -121,17 +116,19 @@ class IcebergPixelReader:
             start, end = time_range
             # Ensure timezone-aware
             if start.tzinfo is None:
-                start = start.replace(tzinfo=timezone.utc)
+                start = start.replace(tzinfo=UTC)
             if end.tzinfo is None:
-                end = end.replace(tzinfo=timezone.utc)
+                end = end.replace(tzinfo=UTC)
 
             # Use year_month for partition pruning
             start_month = start.strftime("%Y-%m")
             end_month = end.strftime("%Y-%m")
-            filters.extend([
-                GreaterThanOrEqual("year_month", start_month),
-                LessThanOrEqual("year_month", end_month),
-            ])
+            filters.extend(
+                [
+                    GreaterThanOrEqual("year_month", start_month),
+                    LessThanOrEqual("year_month", end_month),
+                ]
+            )
 
         # Combine filters
         row_filter = And(*filters) if len(filters) > 1 else filters[0]
@@ -152,10 +149,7 @@ class IcebergPixelReader:
 
         # Post-filter for multiple bands (if not handled by partition)
         if bands and len(bands) > 1:
-            band_mask = pc.is_in(
-                arrow_table.column("band"),
-                pa.array(bands)
-            )
+            band_mask = pc.is_in(arrow_table.column("band"), pa.array(bands))
             arrow_table = arrow_table.filter(band_mask)
 
         # Post-filter for exact time range (partition is by month)
@@ -164,7 +158,9 @@ class IcebergPixelReader:
             time_col = arrow_table.column("time")
 
             # Filter by exact time range
-            ge_start = pc.greater_equal(time_col, pa.scalar(start, type=pa.timestamp("us", tz="UTC")))
+            ge_start = pc.greater_equal(
+                time_col, pa.scalar(start, type=pa.timestamp("us", tz="UTC"))
+            )
             le_end = pc.less_equal(time_col, pa.scalar(end, type=pa.timestamp("us", tz="UTC")))
             time_mask = pc.and_(ge_start, le_end)
             arrow_table = arrow_table.filter(time_mask)
@@ -175,9 +171,9 @@ class IcebergPixelReader:
     def _process_results(
         self,
         arrow_table: pa.Table,
-        bands: Optional[List[str]],
-        reshape: Optional[Tuple[int, int]],
-    ) -> Dict[str, Any]:
+        bands: list[str] | None,
+        reshape: tuple[int, int] | None,
+    ) -> dict[str, Any]:
         """Process Arrow table into band-keyed results.
 
         OPTIMIZED: Uses pandas for fast bulk conversion (50x faster than row-by-row).
@@ -209,7 +205,7 @@ class IcebergPixelReader:
             pixels_list = []
             masks_list = []
 
-            for pixels_raw, mask_raw in zip(band_df["pixels"], band_df["mask"]):
+            for pixels_raw, mask_raw in zip(band_df["pixels"], band_df["mask"], strict=False):
                 pixels_arr = np.array(pixels_raw, dtype=np.uint16)
                 mask_arr = np.array(mask_raw, dtype=bool)
 
@@ -247,9 +243,9 @@ class IcebergPixelReader:
         tile_id: str,
         band: str,
         time: datetime,
-        as_of_snapshot_id: Optional[int] = None,
-        reshape: Optional[Tuple[int, int]] = None,
-    ) -> Optional[Dict[str, Any]]:
+        as_of_snapshot_id: int | None = None,
+        reshape: tuple[int, int] | None = None,
+    ) -> dict[str, Any] | None:
         """
         Read a single observation
 
@@ -294,9 +290,9 @@ class IcebergPixelReader:
 
     def list_tiles(
         self,
-        time_range: Optional[Tuple[datetime, datetime]] = None,
-        as_of_snapshot_id: Optional[int] = None,
-    ) -> List[str]:
+        time_range: tuple[datetime, datetime] | None = None,
+        as_of_snapshot_id: int | None = None,
+    ) -> list[str]:
         """
         List all unique tile IDs
 
@@ -314,10 +310,12 @@ class IcebergPixelReader:
 
         if time_range:
             start, end = time_range
-            filters.extend([
-                GreaterThanOrEqual("year_month", start.strftime("%Y-%m")),
-                LessThanOrEqual("year_month", end.strftime("%Y-%m")),
-            ])
+            filters.extend(
+                [
+                    GreaterThanOrEqual("year_month", start.strftime("%Y-%m")),
+                    LessThanOrEqual("year_month", end.strftime("%Y-%m")),
+                ]
+            )
 
         # Build row filter
         if len(filters) == 1:
@@ -361,9 +359,9 @@ class IcebergPixelReader:
 
     def list_bands(
         self,
-        tile_id: Optional[str] = None,
-        as_of_snapshot_id: Optional[int] = None,
-    ) -> List[str]:
+        tile_id: str | None = None,
+        as_of_snapshot_id: int | None = None,
+    ) -> list[str]:
         """
         List all unique band names
 
@@ -421,10 +419,10 @@ class IcebergPixelReader:
 
     def list_time_range(
         self,
-        tile_id: Optional[str] = None,
-        band: Optional[str] = None,
-        as_of_snapshot_id: Optional[int] = None,
-    ) -> Optional[Tuple[datetime, datetime]]:
+        tile_id: str | None = None,
+        band: str | None = None,
+        as_of_snapshot_id: int | None = None,
+    ) -> tuple[datetime, datetime] | None:
         """
         Get the time range of available data
 
@@ -488,10 +486,10 @@ class IcebergPixelReader:
 
     def count_observations(
         self,
-        tile_id: Optional[str] = None,
-        band: Optional[str] = None,
-        time_range: Optional[Tuple[datetime, datetime]] = None,
-        as_of_snapshot_id: Optional[int] = None,
+        tile_id: str | None = None,
+        band: str | None = None,
+        time_range: tuple[datetime, datetime] | None = None,
+        as_of_snapshot_id: int | None = None,
     ) -> int:
         """
         Count observations matching criteria
@@ -515,10 +513,12 @@ class IcebergPixelReader:
             filters.append(EqualTo("band", band))
         if time_range:
             start, end = time_range
-            filters.extend([
-                GreaterThanOrEqual("year_month", start.strftime("%Y-%m")),
-                LessThanOrEqual("year_month", end.strftime("%Y-%m")),
-            ])
+            filters.extend(
+                [
+                    GreaterThanOrEqual("year_month", start.strftime("%Y-%m")),
+                    LessThanOrEqual("year_month", end.strftime("%Y-%m")),
+                ]
+            )
 
         # Build row filter
         if len(filters) == 1:
@@ -553,11 +553,11 @@ class IcebergPixelReader:
 
         return scan.to_arrow().num_rows
 
-    def get_snapshot_history(self) -> List[Dict[str, Any]]:
+    def get_snapshot_history(self) -> list[dict[str, Any]]:
         """Get snapshot history for Time Travel."""
         return self.storage.get_snapshot_history()
 
-    def get_current_snapshot_id(self) -> Optional[int]:
+    def get_current_snapshot_id(self) -> int | None:
         """Get the current snapshot ID."""
         return self.storage.get_current_snapshot_id()
 

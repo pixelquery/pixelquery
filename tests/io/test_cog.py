@@ -2,11 +2,12 @@
 Tests for COGReader
 """
 
-import pytest
-import tempfile
 import shutil
+import tempfile
 from pathlib import Path
+
 import numpy as np
+import pytest
 import rasterio
 from rasterio.transform import from_bounds
 from rasterio.windows import Window
@@ -34,14 +35,16 @@ class TestCOGReader:
 
         # Write COG
         with rasterio.open(
-            cog_path, 'w',
-            driver='GTiff',
-            height=height, width=width,
+            cog_path,
+            "w",
+            driver="GTiff",
+            height=height,
+            width=width,
             count=4,
             dtype=np.uint16,
-            crs='EPSG:4326',
+            crs="EPSG:4326",
             transform=transform,
-            nodata=0
+            nodata=0,
         ) as dst:
             dst.write(data)
 
@@ -101,19 +104,19 @@ class TestCOGReader:
         with COGReader(mock_cog_file) as reader:
             metadata = reader.get_metadata()
 
-            assert 'crs' in metadata
-            assert 'transform' in metadata
-            assert 'bounds' in metadata
-            assert 'width' in metadata
-            assert 'height' in metadata
-            assert 'count' in metadata
-            assert 'dtype' in metadata
-            assert 'nodata' in metadata
+            assert "crs" in metadata
+            assert "transform" in metadata
+            assert "bounds" in metadata
+            assert "width" in metadata
+            assert "height" in metadata
+            assert "count" in metadata
+            assert "dtype" in metadata
+            assert "nodata" in metadata
 
-            assert metadata['width'] == 100
-            assert metadata['height'] == 100
-            assert metadata['count'] == 4
-            assert metadata['nodata'] == 0
+            assert metadata["width"] == 100
+            assert metadata["height"] == 100
+            assert metadata["count"] == 4
+            assert metadata["nodata"] == 0
 
     def test_get_bounds(self, mock_cog_file):
         """Test bounds extraction"""
@@ -130,7 +133,7 @@ class TestCOGReader:
     def test_get_bounds_wgs84(self, mock_cog_file):
         """Test bounds in WGS84"""
         with COGReader(mock_cog_file) as reader:
-            bounds = reader.get_bounds(target_crs='EPSG:4326')
+            bounds = reader.get_bounds(target_crs="EPSG:4326")
 
             minx, miny, maxx, maxy = bounds
             assert 126.5 <= minx < maxx <= 126.6
@@ -177,14 +180,16 @@ class TestCOGReader:
             data[0, :10, :10] = 0  # Set corner to nodata
 
             with rasterio.open(
-                cog_path, 'w',
-                driver='GTiff',
-                height=height, width=width,
+                cog_path,
+                "w",
+                driver="GTiff",
+                height=height,
+                width=width,
                 count=1,
                 dtype=np.uint16,
-                crs='EPSG:4326',
+                crs="EPSG:4326",
                 transform=transform,
-                nodata=0
+                nodata=0,
             ) as dst:
                 dst.write(data)
 
@@ -237,13 +242,15 @@ class TestCOGReaderProjected:
         data = np.random.randint(0, 1000, (1, height, width), dtype=np.uint16)
 
         with rasterio.open(
-            cog_path, 'w',
-            driver='GTiff',
-            height=height, width=width,
+            cog_path,
+            "w",
+            driver="GTiff",
+            height=height,
+            width=width,
             count=1,
             dtype=np.uint16,
-            crs='EPSG:32633',  # UTM 33N
-            transform=transform
+            crs="EPSG:32633",  # UTM 33N
+            transform=transform,
         ) as dst:
             dst.write(data)
 
@@ -261,7 +268,7 @@ class TestCOGReaderProjected:
     def test_projected_to_wgs84_bounds(self, projected_cog_file):
         """Test bounds transformation to WGS84"""
         with COGReader(projected_cog_file) as reader:
-            bounds = reader.get_bounds(target_crs='EPSG:4326')
+            bounds = reader.get_bounds(target_crs="EPSG:4326")
 
             minx, miny, maxx, maxy = bounds
 
@@ -291,20 +298,21 @@ class TestCOGReaderErrors:
             data = np.random.randint(0, 100, (1, height, width), dtype=np.uint16)
 
             with rasterio.open(
-                cog_path, 'w',
-                driver='GTiff',
-                height=height, width=width,
+                cog_path,
+                "w",
+                driver="GTiff",
+                height=height,
+                width=width,
                 count=1,
                 dtype=np.uint16,
-                crs='EPSG:4326',
-                transform=transform
+                crs="EPSG:4326",
+                transform=transform,
             ) as dst:
                 dst.write(data)
 
-            with COGReader(str(cog_path)) as reader:
+            with COGReader(str(cog_path)) as reader, pytest.raises(IndexError):
                 # Try to read band 2 (doesn't exist)
-                with pytest.raises(IndexError):
-                    reader.read_band(2)
+                reader.read_band(2)
 
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)

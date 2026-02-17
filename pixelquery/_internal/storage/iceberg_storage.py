@@ -11,19 +11,19 @@ Key Features:
 - Thread-safe operations
 """
 
-from typing import Optional, List, Dict, Any
-from pathlib import Path
-from datetime import datetime, timezone
 import logging
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
 
 import pyarrow as pa
 from pyiceberg.catalog.sql import SqlCatalog
+from pyiceberg.exceptions import NamespaceAlreadyExistsError, NoSuchTableError
 from pyiceberg.table import Table
-from pyiceberg.exceptions import NoSuchTableError, NamespaceAlreadyExistsError
 
 from .iceberg_schema import (
-    PIXEL_DATA_SCHEMA,
     PIXEL_DATA_PARTITION_SPEC,
+    PIXEL_DATA_SCHEMA,
     PIXEL_DATA_TABLE_PROPERTIES,
 )
 
@@ -68,8 +68,8 @@ class IcebergStorageManager:
         """
         self.warehouse_path = Path(warehouse_path).resolve()
         self.catalog_name = catalog_name
-        self._catalog: Optional[SqlCatalog] = None
-        self._table: Optional[Table] = None
+        self._catalog: SqlCatalog | None = None
+        self._table: Table | None = None
         self._initialized = False
 
     def initialize(self) -> None:
@@ -96,7 +96,7 @@ class IcebergStorageManager:
             **{
                 "uri": f"sqlite:///{catalog_db}",
                 "warehouse": str(self.warehouse_path),
-            }
+            },
         )
 
         # Create namespace if needed
@@ -120,7 +120,7 @@ class IcebergStorageManager:
                 partition_spec=PIXEL_DATA_PARTITION_SPEC,
                 properties=PIXEL_DATA_TABLE_PROPERTIES,
             )
-            logger.info(f"Created table with partitioning: tile_id, band, year_month")
+            logger.info("Created table with partitioning: tile_id, band, year_month")
 
         self._initialized = True
 
@@ -177,7 +177,7 @@ class IcebergStorageManager:
     def overwrite_data(
         self,
         arrow_table: pa.Table,
-        overwrite_filter: Optional[str] = None,
+        overwrite_filter: str | None = None,
     ) -> int:
         """
         Overwrite table data (ACID)
@@ -203,7 +203,7 @@ class IcebergStorageManager:
         logger.info(f"Overwrite committed as snapshot {snapshot_id}")
         return snapshot_id
 
-    def get_snapshot_history(self) -> List[Dict[str, Any]]:
+    def get_snapshot_history(self) -> list[dict[str, Any]]:
         """
         Get list of all snapshots for Time Travel
 
@@ -218,10 +218,7 @@ class IcebergStorageManager:
         snapshots = []
 
         for snapshot in self.table.snapshots():
-            timestamp = datetime.fromtimestamp(
-                snapshot.timestamp_ms / 1000,
-                tz=timezone.utc
-            )
+            timestamp = datetime.fromtimestamp(snapshot.timestamp_ms / 1000, tz=UTC)
 
             # Summary in PyIceberg 0.10+ is a pydantic model
             if snapshot.summary:
@@ -230,7 +227,7 @@ class IcebergStorageManager:
                     summary_dict = snapshot.summary.model_dump()
                     operation = summary_dict.pop("operation", "unknown")
                     # Also include additional_properties if available
-                    if hasattr(snapshot.summary, 'additional_properties'):
+                    if hasattr(snapshot.summary, "additional_properties"):
                         summary_dict.update(snapshot.summary.additional_properties)
                 except Exception:
                     summary_dict = {}
@@ -239,25 +236,27 @@ class IcebergStorageManager:
                 summary_dict = {}
                 operation = "unknown"
 
-            snapshots.append({
-                "snapshot_id": snapshot.snapshot_id,
-                "timestamp_ms": snapshot.timestamp_ms,
-                "timestamp": timestamp,
-                "operation": operation,
-                "summary": summary_dict,
-            })
+            snapshots.append(
+                {
+                    "snapshot_id": snapshot.snapshot_id,
+                    "timestamp_ms": snapshot.timestamp_ms,
+                    "timestamp": timestamp,
+                    "operation": operation,
+                    "summary": summary_dict,
+                }
+            )
 
         # Sort by timestamp (newest first)
         snapshots.sort(key=lambda x: x["timestamp_ms"], reverse=True)
 
         return snapshots
 
-    def get_current_snapshot_id(self) -> Optional[int]:
+    def get_current_snapshot_id(self) -> int | None:
         """Get the current snapshot ID, or None if no snapshots exist."""
         snapshot = self.table.current_snapshot()
         return snapshot.snapshot_id if snapshot else None
 
-    def get_table_stats(self) -> Dict[str, Any]:
+    def get_table_stats(self) -> dict[str, Any]:
         """
         Get table statistics
 
@@ -281,7 +280,7 @@ class IcebergStorageManager:
 
     def expire_snapshots(
         self,
-        older_than_ms: Optional[int] = None,
+        older_than_ms: int | None = None,
         retain_last: int = 10,
     ) -> int:
         """
@@ -303,7 +302,7 @@ class IcebergStorageManager:
         # Calculate expiration timestamp
         if older_than_ms is None:
             # Default: 7 days ago
-            older_than_ms = int((datetime.now(timezone.utc).timestamp() - 7 * 24 * 60 * 60) * 1000)
+            older_than_ms = int((datetime.now(UTC).timestamp() - 7 * 24 * 60 * 60) * 1000)
 
         # Use Iceberg's expire_snapshots API
         # Note: PyIceberg 0.6.0 may have different API
@@ -316,7 +315,9 @@ class IcebergStorageManager:
             if snapshot.timestamp_ms < older_than_ms:
                 expired_count += 1
 
-        logger.info(f"Would expire {expired_count} snapshots (feature depends on PyIceberg version)")
+        logger.info(
+            f"Would expire {expired_count} snapshots (feature depends on PyIceberg version)"
+        )
         return expired_count
 
 

@@ -1,7 +1,6 @@
 //! Storage modules for efficient I/O operations
 //!
-//! Future modules:
-//! - arrow_chunk: Arrow IPC file operations
-//! - geoparquet: GeoParquet metadata operations
+//! Modules:
+//! - arrow_chunk: Arrow IPC file operations (Phase 2.2)
 
-// pub mod arrow_chunk;  // Phase 2.2
+pub mod arrow_chunk;

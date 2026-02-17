@@ -56,6 +56,7 @@ def _show_iceberg_info(warehouse_path: Path, show_snapshots: bool) -> None:
         print(f"Total Records: {record_count:,}")
 
         import pyarrow.compute as pc
+
         scan = storage.table.scan(selected_fields=["tile_id"])
         df = scan.to_arrow()
         unique_tiles = len(pc.unique(df.column("tile_id")).to_pylist()) if df.num_rows > 0 else 0
@@ -101,13 +102,13 @@ def _show_arrow_info(warehouse_path: Path) -> None:
 
         print(f"Total Metadata Records: {len(metadata_list):,}")
 
-        unique_tiles = set(m.tile_id for m in metadata_list)
+        unique_tiles = {m.tile_id for m in metadata_list}
         print(f"Unique Tiles: {len(unique_tiles):,}")
 
-        unique_bands = sorted(set(m.band for m in metadata_list))
+        unique_bands = sorted({m.band for m in metadata_list})
         print(f"Bands: {', '.join(unique_bands)}")
 
-        year_months = sorted(set(m.year_month for m in metadata_list))
+        year_months = sorted({m.year_month for m in metadata_list})
         if year_months:
             print(f"Time Range: {year_months[0]} to {year_months[-1]}")
 

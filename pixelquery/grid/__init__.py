@@ -8,6 +8,6 @@ from pixelquery.grid.base import TileGrid
 from pixelquery.grid.tile_grid import FixedTileGrid
 
 __all__ = [
-    "TileGrid",
     "FixedTileGrid",
+    "TileGrid",
 ]

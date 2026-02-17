@@ -4,7 +4,8 @@ Query Result Protocol
 Container for query results with multiple output formats.
 """
 
-from typing import Protocol, List, Dict, Any
+from typing import Any, Protocol
+
 from numpy.typing import NDArray
 
 
@@ -18,7 +19,7 @@ class QueryResult(Protocol):
     - NumPy: Raw arrays for custom processing
     """
 
-    tiles: List[Dict[str, Any]]  # List of {tile_id, date, bands: {red: ndarray, ...}}
+    tiles: list[dict[str, Any]]  # List of {tile_id, date, bands: {red: ndarray, ...}}
 
     def to_pandas(self) -> Any:  # pd.DataFrame
         """
@@ -40,7 +41,7 @@ class QueryResult(Protocol):
         """
         ...
 
-    def to_numpy(self) -> Dict[str, NDArray]:
+    def to_numpy(self) -> dict[str, NDArray]:
         """
         Convert to NumPy arrays
 

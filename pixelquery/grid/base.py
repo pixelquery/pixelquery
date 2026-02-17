@@ -4,18 +4,18 @@ Tile Grid System Protocol
 Geographic tile grid for multi-resolution satellite data.
 """
 
-from typing import Protocol, Tuple
+from typing import Protocol
 
 
 class TileGrid(Protocol):
     """
     Geographic tile grid system for multi-resolution data
 
-    PixelQuery uses a fixed geographic grid (e.g., 2.56km × 2.56km tiles)
+    PixelQuery uses a fixed geographic grid (e.g., 2.56km x 2.56km tiles)
     where each tile contains variable pixel counts depending on product resolution:
-    - Sentinel-2 @ 10m: 256×256 pixels
-    - Landsat-8 @ 30m: 85×85 pixels
-    - Planet @ 3m: 853×853 pixels
+    - Sentinel-2 @ 10m: 256x256 pixels
+    - Landsat-8 @ 30m: 85x85 pixels
+    - Planet @ 3m: 853x853 pixels
     """
 
     def get_tile_id(self, lon: float, lat: float) -> str:
@@ -31,7 +31,7 @@ class TileGrid(Protocol):
         """
         ...
 
-    def get_tile_bounds(self, tile_id: str) -> Tuple[float, float, float, float]:
+    def get_tile_bounds(self, tile_id: str) -> tuple[float, float, float, float]:
         """
         Get geographic bounds of a tile
 
