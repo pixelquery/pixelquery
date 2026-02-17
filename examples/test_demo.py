@@ -4,15 +4,15 @@ Test script for demo_timeseries.py
 Creates mock COG files and runs the demo to verify it works.
 """
 
-import tempfile
 import shutil
+import subprocess
+import sys
+import tempfile
 from pathlib import Path
+
 import numpy as np
 import rasterio
 from rasterio.transform import from_bounds
-from datetime import datetime
-import subprocess
-import sys
 
 
 def create_mock_cog_files(output_dir: Path, num_files: int = 3):
@@ -52,19 +52,20 @@ def create_mock_cog_files(output_dir: Path, num_files: int = 3):
 
         # Write COG with metadata
         with rasterio.open(
-            filepath, 'w',
-            driver='GTiff',
+            filepath,
+            "w",
+            driver="GTiff",
             height=height,
             width=width,
             count=4,
             dtype=np.uint16,
-            crs='EPSG:4326',
+            crs="EPSG:4326",
             transform=transform,
-            nodata=0
+            nodata=0,
         ) as dst:
             dst.write(data)
             # Add acquisition time to metadata
-            dst.update_tags(TIFFTAG_DATETIME=f'2024:{month:02d}:15 10:30:00')
+            dst.update_tags(TIFFTAG_DATETIME=f"2024:{month:02d}:15 10:30:00")
 
         print(f"  ✓ Created {filename}")
 
@@ -96,11 +97,13 @@ def main():
             [
                 sys.executable,
                 "examples/demo_timeseries.py",
-                "--cog-dir", str(cog_dir),
-                "--warehouse", str(warehouse_dir)
+                "--cog-dir",
+                str(cog_dir),
+                "--warehouse",
+                str(warehouse_dir),
             ],
             capture_output=True,
-            text=True
+            text=True,
         )
 
         # Print output

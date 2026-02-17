@@ -14,58 +14,48 @@ Usage:
 
 import argparse
 import sys
-from pathlib import Path
 from datetime import datetime
-from typing import List, Tuple
+from pathlib import Path
+
 import numpy as np
 
+from pixelquery.catalog.local import LocalCatalog
+from pixelquery.grid.tile_grid import FixedTileGrid
 from pixelquery.io.cog import COGReader
 from pixelquery.io.ingest import IngestionPipeline
-from pixelquery.catalog.local import LocalCatalog
 from pixelquery.query.executor import QueryExecutor
-from pixelquery.grid.tile_grid import FixedTileGrid
 
 
 def parse_args():
     """Parse command line arguments"""
-    parser = argparse.ArgumentParser(
-        description="PixelQuery Time-Series Demo"
-    )
-    parser.add_argument(
-        "--cog-dir",
-        type=str,
-        required=True,
-        help="Directory containing COG files"
-    )
+    parser = argparse.ArgumentParser(description="PixelQuery Time-Series Demo")
+    parser.add_argument("--cog-dir", type=str, required=True, help="Directory containing COG files")
     parser.add_argument(
         "--warehouse",
         type=str,
         default="./warehouse",
-        help="Warehouse directory path (default: ./warehouse)"
+        help="Warehouse directory path (default: ./warehouse)",
     )
     parser.add_argument(
         "--product-id",
         type=str,
         default="sentinel2_l2a",
-        help="Product ID (default: sentinel2_l2a)"
+        help="Product ID (default: sentinel2_l2a)",
     )
     parser.add_argument(
         "--band-mapping",
         type=str,
         default="1:blue,2:green,3:red,4:nir",
-        help="Band mapping (default: 1:blue,2:green,3:red,4:nir)"
+        help="Band mapping (default: 1:blue,2:green,3:red,4:nir)",
     )
     parser.add_argument(
         "--file-pattern",
         type=str,
         default=None,
-        help="Filter files by pattern (e.g., '*_sr.tiff' for Surface Reflectance only)"
+        help="Filter files by pattern (e.g., '*_sr.tiff' for Surface Reflectance only)",
     )
     parser.add_argument(
-        "--limit",
-        type=int,
-        default=None,
-        help="Limit number of files to ingest (for testing)"
+        "--limit", type=int, default=None, help="Limit number of files to ingest (for testing)"
     )
     return parser.parse_args()
 
@@ -81,11 +71,11 @@ def extract_acquisition_time(cog_path: str) -> datetime:
     """
     with COGReader(cog_path) as reader:
         # Try to get from GDAL metadata tags
-        if hasattr(reader.dataset, 'tags'):
+        if hasattr(reader.dataset, "tags"):
             tags = reader.dataset.tags()
-            if 'TIFFTAG_DATETIME' in tags:
+            if "TIFFTAG_DATETIME" in tags:
                 # Format: "YYYY:MM:DD HH:MM:SS"
-                datetime_str = tags['TIFFTAG_DATETIME']
+                datetime_str = tags["TIFFTAG_DATETIME"]
                 try:
                     return datetime.strptime(datetime_str, "%Y:%m:%d %H:%M:%S")
                 except ValueError:
@@ -93,10 +83,11 @@ def extract_acquisition_time(cog_path: str) -> datetime:
 
     # Fallback 1: Parse from filename
     import re
+
     filename = Path(cog_path).name
 
     # Try YYYY-MM-DD pattern first (e.g., 2025-01-17_analysis_ready.tiff)
-    date_match = re.search(r'(\d{4}-\d{2}-\d{2})', filename)
+    date_match = re.search(r"(\d{4}-\d{2}-\d{2})", filename)
     if date_match:
         date_str = date_match.group(1)
         try:
@@ -105,7 +96,7 @@ def extract_acquisition_time(cog_path: str) -> datetime:
             pass
 
     # Try YYYYMMDD pattern (e.g., S2A_20240115.tif)
-    date_match = re.search(r'(\d{8})', filename)
+    date_match = re.search(r"(\d{8})", filename)
     if date_match:
         date_str = date_match.group(1)
         try:
@@ -115,11 +106,14 @@ def extract_acquisition_time(cog_path: str) -> datetime:
 
     # Fallback 2: Use file modification time
     import os
+
     mtime = os.path.getmtime(cog_path)
     return datetime.fromtimestamp(mtime)
 
 
-def find_cog_files(cog_dir: str, file_pattern: str = None, limit: int = None) -> List[Tuple[str, datetime]]:
+def find_cog_files(
+    cog_dir: str, file_pattern: str | None = None, limit: int | None = None
+) -> list[tuple[str, datetime]]:
     """
     Find all COG files in directory and extract acquisition times
 
@@ -180,8 +174,8 @@ def parse_band_mapping(band_mapping_str: str) -> dict:
     Example: "1:blue,2:green,3:red,4:nir" → {1: "blue", 2: "green", ...}
     """
     mapping = {}
-    for pair in band_mapping_str.split(','):
-        idx_str, name = pair.split(':')
+    for pair in band_mapping_str.split(","):
+        idx_str, name = pair.split(":")
         mapping[int(idx_str)] = name.strip()
     return mapping
 
@@ -212,12 +206,12 @@ def load_chunk_times(warehouse_path, tile_id, band):
         chunk_file = year_month_dir / f"{band}.arrow"
         if chunk_file.exists():
             chunk_data, _ = reader.read_chunk(str(chunk_file))
-            times.extend(chunk_data['time'])
+            times.extend(chunk_data["time"])
 
     return times
 
 
-def compute_ndvi_timeseries(dataset, times) -> List[Tuple[datetime, float]]:
+def compute_ndvi_timeseries(dataset, times) -> list[tuple[datetime, float]]:
     """
     Compute NDVI time-series for a dataset
 
@@ -245,7 +239,9 @@ def compute_ndvi_timeseries(dataset, times) -> List[Tuple[datetime, float]]:
         nir = nir_values[i]
 
         # Compute NDVI
-        ndvi = (nir.astype(float) - red.astype(float)) / (nir.astype(float) + red.astype(float) + 1e-8)
+        ndvi = (nir.astype(float) - red.astype(float)) / (
+            nir.astype(float) + red.astype(float) + 1e-8
+        )
 
         # Calculate mean (excluding invalid values)
         mask = (ndvi >= -1.0) & (ndvi <= 1.0)
@@ -299,9 +295,7 @@ def main():
     print(f"\n[Step 3] Ingesting {len(cog_files)} COG files...")
 
     pipeline = IngestionPipeline(
-        warehouse_path=str(warehouse_path),
-        tile_grid=tile_grid,
-        catalog=catalog
+        warehouse_path=str(warehouse_path), tile_grid=tile_grid, catalog=catalog
     )
 
     band_mapping = parse_band_mapping(args.band_mapping)
@@ -318,7 +312,7 @@ def main():
                 acquisition_time=acq_time,
                 product_id=args.product_id,
                 band_mapping=band_mapping,
-                auto_commit=False  # Buffer metadata for batch write
+                auto_commit=False,  # Buffer metadata for batch write
             )
             total_metadata.extend(metadata_list)
             print(f"      ✓ Created {len(metadata_list)} tile-band chunks")
@@ -327,7 +321,7 @@ def main():
             continue
 
     # Flush all buffered metadata to catalog in one batch
-    print(f"\n[Step 3.1] Writing metadata to catalog...")
+    print("\n[Step 3.1] Writing metadata to catalog...")
     pipeline.flush_metadata()
     print("✓ Metadata written")
 
@@ -357,10 +351,7 @@ def main():
     tile_id = tiles[0]
     print(f"  Loading tile: {tile_id}")
 
-    datasets = executor.load_tiles(
-        tile_ids=[tile_id],
-        bands=["red", "nir"]
-    )
+    datasets = executor.load_tiles(tile_ids=[tile_id], bands=["red", "nir"])
 
     dataset = datasets[tile_id]
 
@@ -399,7 +390,7 @@ def main():
     # Calculate trend (simple linear regression)
     if len(ndvi_values) >= 2:
         time_indices = np.arange(len(ndvi_values))
-        slope, intercept = np.polyfit(time_indices, ndvi_values, 1)
+        slope, _intercept = np.polyfit(time_indices, ndvi_values, 1)
         trend = "increasing" if slope > 0 else "decreasing"
         print(f"  Trend: {trend} (slope: {slope:.6f})")
 
