@@ -112,14 +112,14 @@ class IcechunkStorageManager:
 
         # Create or open repository
         try:
-            self._repo = icechunk.Repository.open(
+            self._repo = icechunk.Repository.open(  # type: ignore[assignment]
                 storage=storage,
                 config=config,
                 authorize_virtual_chunk_access={self.vcc_prefix: None},
             )
             logger.info("Opened existing Icechunk repo at %s", self.repo_path)
         except Exception:
-            self._repo = icechunk.Repository.create(
+            self._repo = icechunk.Repository.create(  # type: ignore[assignment]
                 storage=storage,
                 config=config,
             )
@@ -141,8 +141,8 @@ class IcechunkStorageManager:
             import obstore
             from obspec_utils.registry import ObjectStoreRegistry
 
-            self._registry = ObjectStoreRegistry()
-            self._registry.register("file://", obstore.store.LocalStore())
+            self._registry = ObjectStoreRegistry()  # type: ignore[assignment]
+            self._registry.register("file://", obstore.store.LocalStore())  # type: ignore[attr-defined]
         return self._registry
 
     def writable_session(self, branch: str = "main"):
@@ -161,7 +161,7 @@ class IcechunkStorageManager:
 
     def commit(self, session, message: str) -> str:
         """Commit a session and return the snapshot ID."""
-        return session.commit(message)
+        return session.commit(message)  # type: ignore[no-any-return]
 
     def get_snapshot_history(self) -> list[dict[str, Any]]:
         """Get snapshot ancestry for the main branch."""

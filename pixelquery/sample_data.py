@@ -7,11 +7,12 @@ satellite imagery for quick-start demonstrations.
 
 import logging
 from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 # Sample scene parameters
-_SAMPLE_SCENES = [
+_SAMPLE_SCENES: list[dict[str, Any]] = [
     {
         "filename": "2024-01-15_sample_sr.tif",
         "date": "2024-01-15",
@@ -90,7 +91,7 @@ def create_sample_data(output_dir: str | None = None) -> str:
     rng = np.random.default_rng(42)  # Reproducible
 
     for scene in _SAMPLE_SCENES:
-        filepath = out_path / scene["filename"]
+        filepath: Path = out_path / scene["filename"]
 
         # Generate synthetic reflectance data
         bands = []
@@ -148,7 +149,7 @@ def get_sample_data_path() -> str:
     cache_dir = Path(tempfile.gettempdir()) / "pixelquery_sample_data"
 
     # Check if cache exists and has all files
-    expected_files = [s["filename"] for s in _SAMPLE_SCENES]
+    expected_files: list[str] = [s["filename"] for s in _SAMPLE_SCENES]
     if cache_dir.exists() and all((cache_dir / f).exists() for f in expected_files):
         return str(cache_dir)
 

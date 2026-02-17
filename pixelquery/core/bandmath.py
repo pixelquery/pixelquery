@@ -34,10 +34,10 @@ class BandMathAccessor:
         """Find the primary data variable with a 'band' dimension."""
         for name, var in self._ds.data_vars.items():
             if "band" in var.dims:
-                return name
+                return str(name)
         names = list(self._ds.data_vars)
         if names:
-            return names[0]
+            return str(names[0])
         raise ValueError("Dataset has no data variables")
 
     @property
@@ -73,17 +73,17 @@ class BandMathAccessor:
         # Add b0, b1, b2, ... index references
         n_bands = da.sizes.get("band", 0)
         for i in range(n_bands):
-            namespace[f"b{i}"] = da.isel(band=i)
+            namespace[f"b{i}"] = da.isel(band=i)  # type: ignore[assignment]
 
         # Add band name references (if coordinates exist)
         if "band" in da.coords:
             for band_name in da.coords["band"].values:
-                namespace[str(band_name)] = da.sel(band=band_name)
+                namespace[str(band_name)] = da.sel(band=band_name)  # type: ignore[assignment]
 
         result = eval(expr, {"__builtins__": {}}, namespace)
         if isinstance(result, xr.DataArray):
             result.name = "bandmath"
-        return result
+        return result  # type: ignore[no-any-return]
 
     def __repr__(self) -> str:
         band_map = self.bands

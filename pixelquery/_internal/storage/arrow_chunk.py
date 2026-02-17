@@ -20,7 +20,10 @@ from numpy.typing import NDArray
 
 # Try to use Rust Arrow functions (2-35x faster than Python)
 try:
-    from pixelquery_core import arrow_append_to_chunk, arrow_write_chunk
+    from pixelquery_core import (  # type: ignore[attr-defined]
+        arrow_append_to_chunk,
+        arrow_write_chunk,
+    )
 
     RUST_ARROW_AVAILABLE = True
 except ImportError:

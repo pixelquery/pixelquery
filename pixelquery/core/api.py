@@ -129,7 +129,7 @@ def open_dataset(
         # Use Arrow backend
         from pixelquery._internal.storage.arrow_chunk import ArrowChunkReader
 
-        reader = ArrowChunkReader()
+        reader = ArrowChunkReader()  # type: ignore[assignment]
 
         # Query catalog for chunk paths
         all_bands = bands or catalog.list_bands(tile_id=tile_id)
@@ -143,7 +143,7 @@ def open_dataset(
                 start, end = time_range
                 start_ym = start.strftime("%Y-%m")
                 end_ym = end.strftime("%Y-%m")
-                metadata_list = [m for m in metadata_list if start_ym <= m.year_month <= end_ym]
+                metadata_list = [m for m in metadata_list if start_ym <= m.year_month <= end_ym]  # type: ignore[assignment]
 
             # Read and merge chunks
             times_list = []
@@ -153,7 +153,7 @@ def open_dataset(
             for meta in metadata_list:
                 chunk_path = Path(warehouse_path) / meta.chunk_path
                 if chunk_path.exists():
-                    chunk_data, _chunk_meta = reader.read_chunk(str(chunk_path))
+                    chunk_data, _chunk_meta = reader.read_chunk(str(chunk_path))  # type: ignore[attr-defined]
                     times_list.extend(chunk_data.get("time", []))
                     pixels_list.extend(chunk_data.get("pixels", []))
                     masks_list.extend(chunk_data.get("mask", []))
@@ -329,7 +329,7 @@ def list_tiles(
     if hasattr(catalog, "list_tiles"):
         if as_of_snapshot_id and hasattr(catalog, "get_snapshot_history"):
             # IcebergCatalog with Time Travel
-            return catalog.list_tiles(
+            return catalog.list_tiles(  # type: ignore[call-arg]
                 bounds=bounds,
                 time_range=time_range,
                 as_of_snapshot_id=as_of_snapshot_id,

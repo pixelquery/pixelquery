@@ -59,7 +59,7 @@ class COGReader:
             >>> red_band.shape
             (1024, 1024)
         """
-        return self.dataset.read(band_index)
+        return self.dataset.read(band_index)  # type: ignore[no-any-return]
 
     def read_window(self, window: Window, band_index: int) -> NDArray:
         """
@@ -78,7 +78,7 @@ class COGReader:
             >>> window = Window(0, 0, 256, 256)  # col_off, row_off, width, height
             >>> data = reader.read_window(window, band_index=1)
         """
-        return self.dataset.read(band_index, window=window)
+        return self.dataset.read(band_index, window=window)  # type: ignore[no-any-return]
 
     def get_metadata(self) -> dict[str, Any]:
         """
@@ -130,12 +130,12 @@ class COGReader:
         """
         if self.dataset.crs is None:
             # Assume WGS84 if no CRS
-            return self.dataset.bounds
+            return self.dataset.bounds  # type: ignore[no-any-return]
 
         # Transform bounds to target CRS
         bounds = transform_bounds(self.dataset.crs, target_crs, *self.dataset.bounds)
 
-        return bounds
+        return bounds  # type: ignore[no-any-return]
 
     def get_resolution(self) -> float:
         """
@@ -163,7 +163,7 @@ class COGReader:
         # Check if CRS is projected (meters) or geographic (degrees)
         if self.dataset.crs is not None and self.dataset.crs.is_projected:
             # Already in meters
-            return (pixel_size_x + pixel_size_y) / 2.0
+            return (pixel_size_x + pixel_size_y) / 2.0  # type: ignore[no-any-return]
         else:
             # Geographic CRS (degrees) - convert to meters
             # Use approximate conversion at image center
@@ -174,7 +174,7 @@ class COGReader:
             pixel_size_meters_x = pixel_size_x * meters_per_degree
             pixel_size_meters_y = pixel_size_y * 111320.0  # latitude constant
 
-            return (pixel_size_meters_x + pixel_size_meters_y) / 2.0
+            return (pixel_size_meters_x + pixel_size_meters_y) / 2.0  # type: ignore[no-any-return]
 
     def get_mask(self, band_index: int) -> NDArray:
         """
@@ -200,7 +200,7 @@ class COGReader:
             # No nodata value - all pixels valid
             mask = np.ones(data.shape, dtype=bool)
 
-        return mask
+        return mask  # type: ignore[no-any-return]
 
     def close(self):
         """

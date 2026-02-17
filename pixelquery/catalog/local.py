@@ -79,7 +79,7 @@ class LocalCatalog:
             if icechunk_dir.exists():
                 from pixelquery.catalog.icechunk_catalog import IcechunkCatalog
 
-                return IcechunkCatalog(str(warehouse_path))
+                return IcechunkCatalog(str(warehouse_path))  # type: ignore[return-value]
 
             # Check for Iceberg catalog
             iceberg_db = warehouse / "catalog.db"
@@ -101,7 +101,7 @@ class LocalCatalog:
         elif backend == "icechunk":
             from pixelquery.catalog.icechunk_catalog import IcechunkCatalog
 
-            return IcechunkCatalog(str(warehouse_path))
+            return IcechunkCatalog(str(warehouse_path))  # type: ignore[return-value]
 
         elif backend == "iceberg":
             from pixelquery.catalog.iceberg import IcebergCatalog

@@ -42,13 +42,13 @@ class IcechunkCatalog:
             from pixelquery._internal.storage.icechunk_storage import IcechunkStorageManager
             from pixelquery.io.icechunk_reader import IcechunkVirtualReader
 
-            self._storage = IcechunkStorageManager(
+            self._storage = IcechunkStorageManager(  # type: ignore[assignment]
                 self.warehouse_path,
                 vcc_prefix=self._vcc_prefix,
                 vcc_data_path=self._vcc_data_path,
             )
-            self._storage.initialize()
-            self._reader = IcechunkVirtualReader(self._storage)
+            self._storage.initialize()  # type: ignore[attr-defined]
+            self._reader = IcechunkVirtualReader(self._storage)  # type: ignore[assignment]
 
     def list_tiles(
         self,
@@ -58,7 +58,7 @@ class IcechunkCatalog:
     ) -> list[str]:
         """List scene group names (analogous to tile IDs)."""
         self._ensure_initialized()
-        scenes = self._reader.list_scenes(
+        scenes = self._reader.list_scenes(  # type: ignore[attr-defined]
             time_range=time_range,
             bounds=bounds,
         )
@@ -67,7 +67,7 @@ class IcechunkCatalog:
     def list_bands(self, tile_id: str | None = None) -> list[str]:
         """List available band names."""
         self._ensure_initialized()
-        scenes = self._reader.list_scenes()
+        scenes = self._reader.list_scenes()  # type: ignore[attr-defined]
         all_bands = set()
         for s in scenes:
             if tile_id and s["group"] != tile_id:
@@ -80,12 +80,12 @@ class IcechunkCatalog:
     def get_snapshot_history(self) -> list[dict[str, Any]]:
         """Get Icechunk snapshot history for Time Travel."""
         self._ensure_initialized()
-        return self._storage.get_snapshot_history()
+        return self._storage.get_snapshot_history()  # type: ignore[no-any-return, attr-defined]
 
     def get_current_snapshot_id(self) -> str | None:
         """Get the current snapshot ID."""
         self._ensure_initialized()
-        history = self._storage.get_snapshot_history()
+        history = self._storage.get_snapshot_history()  # type: ignore[attr-defined]
         return history[0]["snapshot_id"] if history else None
 
     def exists(self) -> bool:
@@ -97,7 +97,7 @@ class IcechunkCatalog:
     def products(self) -> list[str]:
         """List product_ids found in the warehouse."""
         self._ensure_initialized()
-        scenes = self._reader.list_scenes()
+        scenes = self._reader.list_scenes()  # type: ignore[attr-defined]
         product_ids = set()
         for s in scenes:
             product_id = s.get("product_id")
@@ -119,15 +119,15 @@ class IcechunkCatalog:
         try:
             import zarr
 
-            session = self._storage.readonly_session()
+            session = self._storage.readonly_session()  # type: ignore[attr-defined]
             store = session.store
             root = zarr.open_group(store, mode="r")
 
             if "_products_registry" in root:
-                profiles_data = dict(root["_products_registry"].attrs.get("profiles", {}))
+                profiles_data = dict(root["_products_registry"].attrs.get("profiles", {}))  # type: ignore[arg-type]
                 profiles = {}
                 for pid, pdata in profiles_data.items():
-                    profiles[pid] = ProductProfile.from_dict(pdata)
+                    profiles[pid] = ProductProfile.from_dict(pdata)  # type: ignore[arg-type]
                 return profiles
         except Exception as e:
             logger.debug("Could not load product profiles from repo: %s", e)
@@ -153,19 +153,19 @@ class IcechunkCatalog:
         profiles_data = {pid: p.to_dict() for pid, p in existing_profiles.items()}
 
         # Write to _products_registry group attrs
-        session = self._storage.writable_session()
+        session = self._storage.writable_session()  # type: ignore[attr-defined]
         store = session.store
         root = zarr.open_group(store, mode="a")
 
         if "_products_registry" not in root:
             registry_group = root.create_group("_products_registry")
         else:
-            registry_group = root["_products_registry"]
+            registry_group = root["_products_registry"]  # type: ignore[assignment]
 
         registry_group.attrs["profiles"] = profiles_data
 
         # Commit the change
-        self._storage.commit(session, f"Register product profile: {profile.product_id}")
+        self._storage.commit(session, f"Register product profile: {profile.product_id}")  # type: ignore[attr-defined]
         logger.info("Registered product profile to repo: %s", profile.product_id)
 
     def scenes(
@@ -186,12 +186,12 @@ class IcechunkCatalog:
             List of scene metadata dicts
         """
         self._ensure_initialized()
-        scenes = self._reader.list_scenes(time_range=time_range, bounds=bounds)
+        scenes = self._reader.list_scenes(time_range=time_range, bounds=bounds)  # type: ignore[attr-defined]
 
         if product_id:
             scenes = [s for s in scenes if s.get("product_id") == product_id]
 
-        return scenes
+        return scenes  # type: ignore[no-any-return]
 
     def summary(self) -> str:
         """
@@ -203,10 +203,10 @@ class IcechunkCatalog:
         self._ensure_initialized()
 
         # Get all scenes
-        all_scenes = self._reader.list_scenes()
+        all_scenes = self._reader.list_scenes()  # type: ignore[attr-defined]
 
         # Group by product_id
-        products_data = {}
+        products_data: dict[str, Any] = {}
         for scene in all_scenes:
             product_id = scene.get("product_id", "unknown")
             if product_id not in products_data:

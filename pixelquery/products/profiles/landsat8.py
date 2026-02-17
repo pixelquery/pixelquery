@@ -74,7 +74,7 @@ class Landsat8L2:
     nodata: int = 0
 
     # Band specifications (immutable)
-    bands: dict[str, Landsat8BandInfo] = None
+    bands: dict[str, Landsat8BandInfo] | None = None
 
     def __post_init__(self):
         """Initialize band definitions"""
@@ -156,6 +156,7 @@ class Landsat8L2:
             >>> print(band.standard_name)
             'red'
         """
+        assert self.bands is not None
         for band_info in self.bands.values():
             if band_info.native_name == native_name:
                 return band_info
@@ -168,6 +169,7 @@ class Landsat8L2:
         Returns:
             Dictionary of common bands
         """
+        assert self.bands is not None
         return {
             name: band
             for name, band in self.bands.items()
@@ -176,6 +178,7 @@ class Landsat8L2:
 
     def __repr__(self) -> str:
         """String representation"""
+        assert self.bands is not None
         return (
             f"<Landsat8L2>\n"
             f"Provider: {self.provider}\n"

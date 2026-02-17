@@ -13,7 +13,7 @@ import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Any, Union
 
 import numpy as np
 from numpy.typing import NDArray
@@ -34,7 +34,10 @@ if TYPE_CHECKING:
 
 # Try to use Rust resampling (4-6x faster than scipy)
 try:
-    from pixelquery_core import resample_bilinear, resample_nearest_neighbor  # noqa: F401
+    from pixelquery_core import (  # type: ignore[attr-defined]  # noqa: F401
+        resample_bilinear,
+        resample_nearest_neighbor,
+    )
 
     RUST_RESAMPLE_AVAILABLE = True
     logger.debug("Using Rust resampling (4-6x faster)")
@@ -83,7 +86,10 @@ def _process_tile_band_worker(
     """
     # Import resampling functions
     try:
-        from pixelquery_core import resample_bilinear, resample_nearest_neighbor
+        from pixelquery_core import (  # type: ignore[attr-defined]
+            resample_bilinear,
+            resample_nearest_neighbor,
+        )
 
         use_rust = True
     except ImportError:
@@ -260,7 +266,7 @@ class IngestionPipeline:
         self.warehouse_path = Path(warehouse_path)
         self.tile_grid = tile_grid
         self.storage_backend = storage_backend
-        self._metadata_buffer = []  # Buffer for accumulating metadata
+        self._metadata_buffer: list[Any] = []  # Buffer for accumulating metadata
         self.max_workers = max_workers if max_workers is not None else mp.cpu_count()
 
         # Determine actual backend
@@ -284,7 +290,7 @@ class IngestionPipeline:
             logger.info("Using Iceberg storage backend")
         else:
             self.chunk_writer = ArrowChunkWriter()
-            self.iceberg_writer = None  # Not used for Arrow
+            self.iceberg_writer = None  # type: ignore[assignment]
             logger.info("Using Arrow IPC storage backend")
 
     def _should_use_iceberg(self) -> bool:
@@ -450,7 +456,7 @@ class IngestionPipeline:
                             full_chunk_path.parent.mkdir(parents=True, exist_ok=True)
 
                             # Write or append to chunk
-                            self.chunk_writer.append_to_chunk(
+                            self.chunk_writer.append_to_chunk(  # type: ignore[union-attr]
                                 str(full_chunk_path),
                                 data={
                                     "time": [acquisition_time],
@@ -504,7 +510,7 @@ class IngestionPipeline:
             else:
                 # For Arrow, register metadata with GeoParquet catalog
                 if auto_commit:
-                    self.catalog.add_tile_metadata_batch(metadata_list)
+                    self.catalog.add_tile_metadata_batch(metadata_list)  # type: ignore[union-attr]
                 else:
                     self._metadata_buffer.extend(metadata_list)
 
@@ -532,7 +538,7 @@ class IngestionPipeline:
             logger.debug("Iceberg backend: metadata committed atomically with data")
             self._metadata_buffer.clear()
         elif self._metadata_buffer:
-            self.catalog.add_tile_metadata_batch(self._metadata_buffer)
+            self.catalog.add_tile_metadata_batch(self._metadata_buffer)  # type: ignore[union-attr]
             self._metadata_buffer.clear()
 
     def _extract_tile_data(
@@ -634,7 +640,7 @@ class IngestionPipeline:
             if resampled.shape != target_shape:
                 resampled = resampled[:target_h, :target_w]
 
-        return resampled.astype(data.dtype)
+        return resampled.astype(data.dtype)  # type: ignore[no-any-return]
 
     def __repr__(self) -> str:
         """String representation"""

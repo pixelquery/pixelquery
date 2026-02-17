@@ -51,18 +51,18 @@ def _show_iceberg_info(warehouse_path: Path, show_snapshots: bool) -> None:
         print(f"  Location: {stats['table_location']}")
         print()
 
-        scan = storage.table.scan(selected_fields=["tile_id"])
+        scan = storage.table.scan(selected_fields=("tile_id",))
         record_count = scan.to_arrow().num_rows
         print(f"Total Records: {record_count:,}")
 
         import pyarrow.compute as pc
 
-        scan = storage.table.scan(selected_fields=["tile_id"])
+        scan = storage.table.scan(selected_fields=("tile_id",))
         df = scan.to_arrow()
         unique_tiles = len(pc.unique(df.column("tile_id")).to_pylist()) if df.num_rows > 0 else 0
         print(f"Unique Tiles: {unique_tiles:,}")
 
-        scan = storage.table.scan(selected_fields=["band"])
+        scan = storage.table.scan(selected_fields=("band",))
         df = scan.to_arrow()
         unique_bands = pc.unique(df.column("band")).to_pylist() if df.num_rows > 0 else []
         print(f"Bands: {', '.join(sorted(unique_bands))}")

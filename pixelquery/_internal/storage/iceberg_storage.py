@@ -129,14 +129,14 @@ class IcebergStorageManager:
         """Get the Iceberg catalog, initializing if needed."""
         if self._catalog is None:
             self.initialize()
-        return self._catalog
+        return self._catalog  # type: ignore[return-value]
 
     @property
     def table(self) -> Table:
         """Get the pixel data table, initializing if needed."""
         if self._table is None:
             self.initialize()
-        return self._table
+        return self._table  # type: ignore[return-value]
 
     @property
     def is_initialized(self) -> bool:
@@ -158,7 +158,7 @@ class IcebergStorageManager:
         """
         if arrow_table.num_rows == 0:
             logger.warning("Attempted to append empty table")
-            return self.table.current_snapshot().snapshot_id if self.table.current_snapshot() else 0
+            return self.table.current_snapshot().snapshot_id if self.table.current_snapshot() else 0  # type: ignore[union-attr]
 
         logger.debug(f"Appending {arrow_table.num_rows} rows to Iceberg table")
 

@@ -62,7 +62,7 @@ class IcechunkVirtualReader:
         if "_scenes_index" not in root:
             return []
 
-        scenes = list(root["_scenes_index"].attrs.get("scenes", []))
+        scenes = list(root["_scenes_index"].attrs.get("scenes", []))  # type: ignore[arg-type]
 
         # Filter by time range
         if time_range:
@@ -75,9 +75,9 @@ class IcechunkVirtualReader:
 
             filtered = []
             for s in scenes:
-                acq = s.get("acquisition_time")
+                acq = s.get("acquisition_time")  # type: ignore[union-attr]
                 if acq:
-                    t = datetime.fromisoformat(acq)
+                    t = datetime.fromisoformat(acq)  # type: ignore[arg-type]
                     if t.tzinfo is None:
                         t = t.replace(tzinfo=UTC)
                     if start <= t <= end:
@@ -89,19 +89,19 @@ class IcechunkVirtualReader:
             minx, miny, maxx, maxy = bounds
             filtered = []
             for s in scenes:
-                sb = s.get("bounds")
+                sb = s.get("bounds")  # type: ignore[union-attr]
                 if sb is None:
                     # No bounds info -> include by default
                     filtered.append(s)
-                elif not (sb[2] < minx or sb[0] > maxx or sb[3] < miny or sb[1] > maxy):
+                elif not (sb[2] < minx or sb[0] > maxx or sb[3] < miny or sb[1] > maxy):  # type: ignore[index, operator]
                     filtered.append(s)
             scenes = filtered
 
         # Filter by product_id
         if product_id:
-            scenes = [s for s in scenes if s.get("product_id") == product_id]
+            scenes = [s for s in scenes if s.get("product_id") == product_id]  # type: ignore[union-attr]
 
-        return scenes
+        return scenes  # type: ignore[return-value]
 
     def _apply_cloud_mask(
         self,
@@ -185,17 +185,17 @@ class IcechunkVirtualReader:
 
         # VirtualTIFF stores all bands as variable "0" with shape (band, y, x)
         if "0" not in ds:
-            return ds
+            return ds  # type: ignore[no-any-return]
 
         data = ds["0"]
 
         # Assign band name coordinates
-        if band_names and len(band_names) == data.sizes.get("band", 0):
+        if band_names and len(band_names) == data.sizes.get("band", 0):  # type: ignore[arg-type]
             data = data.assign_coords(band=band_names)
 
         # Filter bands if requested
         if bands and band_names:
-            available = set(band_names)
+            available = set(band_names)  # type: ignore[arg-type]
             selected = [b for b in bands if b in available]
             if selected:
                 data = data.sel(band=selected)
@@ -206,8 +206,8 @@ class IcechunkVirtualReader:
             if mask_file:
                 data = self._apply_cloud_mask(
                     data,
-                    mask_file,
-                    product_id=attrs.get("product_id"),
+                    mask_file,  # type: ignore[arg-type]
+                    product_id=attrs.get("product_id"),  # type: ignore[arg-type]
                 )
 
         # Build result dataset
@@ -222,7 +222,7 @@ class IcechunkVirtualReader:
         if attrs.get("crs"):
             result.attrs["crs"] = attrs["crs"]
 
-        return result
+        return result  # type: ignore[no-any-return]
 
     def open_xarray(
         self,
@@ -287,7 +287,7 @@ class IcechunkVirtualReader:
                         acq_time = acq_time.replace(tzinfo=UTC)
                     times.append(acq_time)
                 else:
-                    times.append(None)
+                    times.append(None)  # type: ignore[arg-type]
 
                 datasets.append(ds)
             except Exception as e:
@@ -324,4 +324,4 @@ class IcechunkVirtualReader:
 
     def get_snapshot_history(self) -> list[dict[str, Any]]:
         """Get Icechunk snapshot history for Time Travel."""
-        return self.storage.get_snapshot_history()
+        return self.storage.get_snapshot_history()  # type: ignore[no-any-return]

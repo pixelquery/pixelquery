@@ -124,9 +124,9 @@ class IcechunkVirtualWriter:
         if mask_path:
             scene_attrs["mask_source_file"] = str(Path(mask_path).resolve())
         if bounds is not None:
-            scene_attrs["bounds"] = [float(b) for b in bounds]
+            scene_attrs["bounds"] = [float(b) for b in bounds]  # type: ignore[misc]
         if "0" in vds:
-            scene_attrs["shape"] = list(vds["0"].shape)
+            scene_attrs["shape"] = list(vds["0"].shape)  # type: ignore[arg-type]
 
         scene_group.attrs.update(scene_attrs)
 
@@ -184,8 +184,8 @@ class IcechunkVirtualWriter:
             idx_group = root.create_group("_scenes_index")
             scenes = []
         else:
-            idx_group = root["_scenes_index"]
-            scenes = list(idx_group.attrs.get("scenes", []))
+            idx_group = root["_scenes_index"]  # type: ignore[assignment]
+            scenes = list(idx_group.attrs.get("scenes", []))  # type: ignore[arg-type]
 
         # Add new scene entry
         entry = {

@@ -36,12 +36,12 @@ def patch_imagecodecs():
             continue
 
         try:
-            init_params = set(inspect.signature(cls.__init__).parameters.keys()) - {"self"}
+            init_params = set(inspect.signature(cls.__init__).parameters.keys()) - {"self"}  # type: ignore[misc]
         except (ValueError, TypeError):
             init_params = set()
 
         def _make_patched(valid_params):
-            @classmethod
+            @classmethod  # type: ignore[misc]
             def patched_from_config(klass, config):
                 config = dict(config)
                 for key in ("id", "name", "configuration"):

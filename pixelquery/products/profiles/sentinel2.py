@@ -75,7 +75,7 @@ class Sentinel2L2A:
     nodata: int = 0
 
     # Band specifications (immutable)
-    bands: dict[str, Sentinel2BandInfo] = None
+    bands: dict[str, Sentinel2BandInfo] | None = None
 
     def __post_init__(self):
         """Initialize band definitions"""
@@ -179,6 +179,7 @@ class Sentinel2L2A:
             >>> print(band.standard_name)
             'red'
         """
+        assert self.bands is not None
         for band_info in self.bands.values():
             if band_info.native_name == native_name:
                 return band_info
@@ -191,6 +192,7 @@ class Sentinel2L2A:
         Returns:
             Dictionary of 10m bands (blue, green, red, nir)
         """
+        assert self.bands is not None
         return {name: band for name, band in self.bands.items() if band.resolution == 10.0}
 
     def get_20m_bands(self) -> dict[str, Sentinel2BandInfo]:
@@ -200,10 +202,12 @@ class Sentinel2L2A:
         Returns:
             Dictionary of 20m bands (red edge, narrow NIR, SWIR)
         """
+        assert self.bands is not None
         return {name: band for name, band in self.bands.items() if band.resolution == 20.0}
 
     def __repr__(self) -> str:
         """String representation"""
+        assert self.bands is not None
         return (
             f"<Sentinel2L2A>\n"
             f"Provider: {self.provider}\n"

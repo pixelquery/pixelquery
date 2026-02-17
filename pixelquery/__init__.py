@@ -49,12 +49,12 @@ from pixelquery.core import (
 try:
     from pixelquery.products import BandInfo
 except ImportError:
-    BandInfo = None
+    BandInfo = None  # type: ignore[misc, assignment]
 
 try:
     from pixelquery.grid import TileGrid
 except ImportError:
-    TileGrid = None
+    TileGrid = None  # type: ignore[misc, assignment]
 
 # Register xarray BandMath accessor (ds.bandmath.ndvi(), etc.)
 import pixelquery.core.bandmath

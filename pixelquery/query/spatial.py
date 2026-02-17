@@ -136,7 +136,7 @@ def geometry_to_bbox(
         raise ImportError("shapely is required. Install with: pip install shapely")
 
     geom = _parse_geometry(geometry)
-    return geom.bounds
+    return geom.bounds  # type: ignore[no-any-return]
 
 
 def clip_tile_to_geometry(
@@ -260,7 +260,7 @@ class SpatialQuery:
     def __init__(self, tile_grid: FixedTileGrid | None = None):
         self.grid = tile_grid or FixedTileGrid()
         self._geometry = None
-        self._available_tiles = None
+        self._available_tiles: list[str] | None = None
 
     def from_geojson(self, geojson: dict | str | Path) -> "SpatialQuery":
         """Set query geometry from GeoJSON"""

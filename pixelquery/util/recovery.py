@@ -45,7 +45,7 @@ class RecoveryTool:
 
     def diagnose(self) -> dict[str, Any]:
         """Diagnose warehouse for issues"""
-        issues = {
+        issues: dict[str, Any] = {
             "orphaned_temp_files": [],
             "storage_stats": {},
             "backend_info": {},
@@ -127,7 +127,7 @@ class RecoveryTool:
         cleanup_orphaned_data: bool = False,
     ) -> dict[str, Any]:
         """Repair warehouse issues"""
-        results = {
+        results: dict[str, Any] = {
             "temp_files_removed": 0,
             "orphaned_data_removed": 0,
             "actions_taken": [],
@@ -176,7 +176,7 @@ class RecoveryTool:
 
     def verify_integrity(self) -> dict[str, Any]:
         """Verify warehouse integrity"""
-        results = {
+        results: dict[str, Any] = {
             "status": "healthy",
             "checks": [],
             "errors": [],

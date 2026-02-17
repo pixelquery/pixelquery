@@ -125,8 +125,8 @@ class IcebergPixelReader:
             end_month = end.strftime("%Y-%m")
             filters.extend(
                 [
-                    GreaterThanOrEqual("year_month", start_month),
-                    LessThanOrEqual("year_month", end_month),
+                    GreaterThanOrEqual("year_month", start_month),  # type: ignore[list-item]
+                    LessThanOrEqual("year_month", end_month),  # type: ignore[list-item]
                 ]
             )
 
@@ -321,7 +321,7 @@ class IcebergPixelReader:
         if len(filters) == 1:
             row_filter = filters[0]
         elif len(filters) > 1:
-            row_filter = And(*filters)
+            row_filter = And(*filters)  # type: ignore[assignment]
         else:
             row_filter = None
 
@@ -331,22 +331,22 @@ class IcebergPixelReader:
                 scan = self.storage.table.scan(
                     snapshot_id=as_of_snapshot_id,
                     row_filter=row_filter,
-                    selected_fields=["tile_id"],
+                    selected_fields=("tile_id",),
                 )
             else:
                 scan = self.storage.table.scan(
                     snapshot_id=as_of_snapshot_id,
-                    selected_fields=["tile_id"],
+                    selected_fields=("tile_id",),
                 )
         else:
             if row_filter is not None:
                 scan = self.storage.table.scan(
                     row_filter=row_filter,
-                    selected_fields=["tile_id"],
+                    selected_fields=("tile_id",),
                 )
             else:
                 scan = self.storage.table.scan(
-                    selected_fields=["tile_id"],
+                    selected_fields=("tile_id",),
                 )
 
         arrow_table = scan.to_arrow()
@@ -383,7 +383,7 @@ class IcebergPixelReader:
         if len(filters) == 1:
             row_filter = filters[0]
         elif len(filters) > 1:
-            row_filter = And(*filters)
+            row_filter = And(*filters)  # type: ignore[assignment]
         else:
             row_filter = None
 
@@ -392,22 +392,22 @@ class IcebergPixelReader:
                 scan = self.storage.table.scan(
                     snapshot_id=as_of_snapshot_id,
                     row_filter=row_filter,
-                    selected_fields=["band"],
+                    selected_fields=("band",),
                 )
             else:
                 scan = self.storage.table.scan(
                     snapshot_id=as_of_snapshot_id,
-                    selected_fields=["band"],
+                    selected_fields=("band",),
                 )
         else:
             if row_filter is not None:
                 scan = self.storage.table.scan(
                     row_filter=row_filter,
-                    selected_fields=["band"],
+                    selected_fields=("band",),
                 )
             else:
                 scan = self.storage.table.scan(
-                    selected_fields=["band"],
+                    selected_fields=("band",),
                 )
 
         arrow_table = scan.to_arrow()
@@ -447,7 +447,7 @@ class IcebergPixelReader:
         if len(filters) == 1:
             row_filter = filters[0]
         elif len(filters) > 1:
-            row_filter = And(*filters)
+            row_filter = And(*filters)  # type: ignore[assignment]
         else:
             row_filter = None
 
@@ -456,22 +456,22 @@ class IcebergPixelReader:
                 scan = self.storage.table.scan(
                     snapshot_id=as_of_snapshot_id,
                     row_filter=row_filter,
-                    selected_fields=["time"],
+                    selected_fields=("time",),
                 )
             else:
                 scan = self.storage.table.scan(
                     snapshot_id=as_of_snapshot_id,
-                    selected_fields=["time"],
+                    selected_fields=("time",),
                 )
         else:
             if row_filter is not None:
                 scan = self.storage.table.scan(
                     row_filter=row_filter,
-                    selected_fields=["time"],
+                    selected_fields=("time",),
                 )
             else:
                 scan = self.storage.table.scan(
-                    selected_fields=["time"],
+                    selected_fields=("time",),
                 )
 
         arrow_table = scan.to_arrow()
@@ -515,8 +515,8 @@ class IcebergPixelReader:
             start, end = time_range
             filters.extend(
                 [
-                    GreaterThanOrEqual("year_month", start.strftime("%Y-%m")),
-                    LessThanOrEqual("year_month", end.strftime("%Y-%m")),
+                    GreaterThanOrEqual("year_month", start.strftime("%Y-%m")),  # type: ignore[list-item]
+                    LessThanOrEqual("year_month", end.strftime("%Y-%m")),  # type: ignore[list-item]
                 ]
             )
 
@@ -524,7 +524,7 @@ class IcebergPixelReader:
         if len(filters) == 1:
             row_filter = filters[0]
         elif len(filters) > 1:
-            row_filter = And(*filters)
+            row_filter = And(*filters)  # type: ignore[assignment]
         else:
             row_filter = None
 
@@ -533,25 +533,25 @@ class IcebergPixelReader:
                 scan = self.storage.table.scan(
                     snapshot_id=as_of_snapshot_id,
                     row_filter=row_filter,
-                    selected_fields=["tile_id"],  # Minimal column
+                    selected_fields=("tile_id",),  # Minimal column
                 )
             else:
                 scan = self.storage.table.scan(
                     snapshot_id=as_of_snapshot_id,
-                    selected_fields=["tile_id"],
+                    selected_fields=("tile_id",),
                 )
         else:
             if row_filter is not None:
                 scan = self.storage.table.scan(
                     row_filter=row_filter,
-                    selected_fields=["tile_id"],
+                    selected_fields=("tile_id",),
                 )
             else:
                 scan = self.storage.table.scan(
-                    selected_fields=["tile_id"],
+                    selected_fields=("tile_id",),
                 )
 
-        return scan.to_arrow().num_rows
+        return scan.to_arrow().num_rows  # type: ignore[no-any-return]
 
     def get_snapshot_history(self) -> list[dict[str, Any]]:
         """Get snapshot history for Time Travel."""

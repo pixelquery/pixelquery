@@ -4,4 +4,4 @@ Internal Storage Module
 ⚠️ PRIVATE API - Do not use directly!
 """
 
-__all__ = []
+__all__: list[str] = []

@@ -264,7 +264,7 @@ def ingest(
         group_names = []
         for info in cog_infos:
             try:
-                name = pipeline.ingest_cog(**info)
+                name = pipeline.ingest_cog(**info)  # type: ignore[arg-type]
                 group_names.append(name)
             except Exception as e2:
                 errors.append(f"{info['cog_path']}: {e2}")

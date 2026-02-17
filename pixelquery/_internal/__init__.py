@@ -8,4 +8,4 @@ The API may change without notice.
 """
 
 # No exports - internal use only
-__all__ = []
+__all__: list[str] = []

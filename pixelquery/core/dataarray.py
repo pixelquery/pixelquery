@@ -103,7 +103,7 @@ class DataArray:
             return self
 
         # Convert label-based indexers to integer indexers
-        integer_indexers = {}
+        integer_indexers: dict[str, int | slice] = {}
         for dim, value in indexers.items():
             if dim not in self.dims:
                 raise KeyError(f"Dimension '{dim}' not found. Available: {list(self.dims.keys())}")

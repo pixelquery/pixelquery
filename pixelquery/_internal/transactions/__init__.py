@@ -11,4 +11,4 @@ The custom 2PC implementation has been removed. Iceberg provides:
 - Time Travel via snapshots
 """
 
-__all__ = []
+__all__: list[str] = []

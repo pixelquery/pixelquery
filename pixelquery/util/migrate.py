@@ -85,7 +85,7 @@ class MigrationTool:
 
                 storage = IcebergStorageManager(str(self.warehouse_path))
                 storage.initialize()
-                scan = storage.table.scan(selected_fields=["tile_id"])
+                scan = storage.table.scan(selected_fields=("tile_id",))
                 iceberg_records = scan.to_arrow().num_rows
             except Exception as e:
                 logger.warning(f"Could not count Iceberg records: {e}")
@@ -243,7 +243,7 @@ class MigrationTool:
             storage = IcebergStorageManager(str(self.warehouse_path))
             storage.initialize()
 
-            scan = storage.table.scan(selected_fields=["tile_id", "band", "year_month"])
+            scan = storage.table.scan(selected_fields=("tile_id", "band", "year_month"))
             df = scan.to_pandas()
 
             unique_chunks = len(df.groupby(["tile_id", "band", "year_month"]))
