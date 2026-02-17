@@ -10,6 +10,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+pytest.importorskip("sqlalchemy", reason="sqlalchemy required for pyiceberg SQL catalog")
+
 from pixelquery.io.iceberg_reader import IcebergPixelReader
 from pixelquery.io.iceberg_writer import IcebergPixelWriter
 

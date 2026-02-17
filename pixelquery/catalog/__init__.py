@@ -11,7 +11,6 @@ Supports three backends:
 Use LocalCatalog.create() for automatic backend selection.
 """
 
-from pixelquery.catalog.iceberg import IcebergCatalog
 from pixelquery.catalog.local import LocalCatalog
 
 __all__ = [
@@ -20,9 +19,13 @@ __all__ = [
 ]
 
 
-# Lazy import for IcechunkCatalog (icechunk deps may not be installed)
+# Lazy imports for optional backends (pyiceberg/icechunk deps may not be installed)
 def __getattr__(name):
-    if name == "IcechunkCatalog":
+    if name == "IcebergCatalog":
+        from pixelquery.catalog.iceberg import IcebergCatalog
+
+        return IcebergCatalog
+    elif name == "IcechunkCatalog":
         from pixelquery.catalog.icechunk_catalog import IcechunkCatalog
 
         return IcechunkCatalog

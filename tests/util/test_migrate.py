@@ -310,6 +310,7 @@ class TestMigrationToolIntegration:
         assert result["backup_path"] is not None
 
         # Verify Iceberg catalog exists
+        pytest.importorskip("sqlalchemy", reason="sqlalchemy required for pyiceberg SQL catalog")
         from pixelquery.catalog.iceberg import IcebergCatalog
 
         catalog = IcebergCatalog(temp_warehouse)
