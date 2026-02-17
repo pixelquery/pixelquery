@@ -312,8 +312,8 @@ class IcebergPixelReader:
             start, end = time_range
             filters.extend(
                 [
-                    GreaterThanOrEqual("year_month", start.strftime("%Y-%m")),
-                    LessThanOrEqual("year_month", end.strftime("%Y-%m")),
+                    GreaterThanOrEqual("year_month", start.strftime("%Y-%m")),  # type: ignore[list-item]
+                    LessThanOrEqual("year_month", end.strftime("%Y-%m")),  # type: ignore[list-item]
                 ]
             )
 

@@ -184,6 +184,14 @@ module = [
 ]
 ignore_missing_imports = true
 
+# pyiceberg type stubs differ across versions/environments
+[[tool.mypy.overrides]]
+module = [
+    "pixelquery._internal.storage.iceberg_storage",
+    "pixelquery.io.iceberg_reader",
+]
+warn_unused_ignores = false
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"

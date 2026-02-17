@@ -11,6 +11,8 @@ import numpy as np
 import pyarrow as pa
 import pytest
 
+pytest.importorskip("sqlalchemy", reason="sqlalchemy required for pyiceberg SQL catalog")
+
 from pixelquery._internal.storage.iceberg_storage import IcebergStorageManager
 
 
