@@ -93,10 +93,13 @@ class LocalCatalog:
             if arrow_metadata.exists():
                 return cls(str(warehouse_path))
 
-            # Default to Iceberg for new warehouses
-            from pixelquery.catalog.iceberg import IcebergCatalog
+            # Default to Iceberg for new warehouses (fall back to Arrow if unavailable)
+            try:
+                from pixelquery.catalog.iceberg import IcebergCatalog
 
-            return IcebergCatalog(str(warehouse_path))
+                return IcebergCatalog(str(warehouse_path))
+            except ImportError:
+                return cls(str(warehouse_path))
 
         elif backend == "icechunk":
             from pixelquery.catalog.icechunk_catalog import IcechunkCatalog
@@ -104,7 +107,13 @@ class LocalCatalog:
             return IcechunkCatalog(str(warehouse_path))  # type: ignore[return-value]
 
         elif backend == "iceberg":
-            from pixelquery.catalog.iceberg import IcebergCatalog
+            try:
+                from pixelquery.catalog.iceberg import IcebergCatalog
+            except ImportError as e:
+                raise ImportError(
+                    "Iceberg backend requires pyiceberg and sqlalchemy. "
+                    "Install with: pip install 'pixelquery[legacy]'"
+                ) from e
 
             return IcebergCatalog(str(warehouse_path))
 
