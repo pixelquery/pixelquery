@@ -168,22 +168,35 @@ def ingest(
 
     start = time.perf_counter()
 
-    source_path = Path(source)
     errors = []
 
-    # Discover COG files
-    if source_path.is_file():
-        cog_files = [source_path]
-    elif source_path.is_dir():
-        cog_files = sorted(source_path.glob(glob_pattern))
-        if not cog_files:
-            raise FileNotFoundError(f"No files matching '{glob_pattern}' found in {source}")
+    # Check if source is a remote URI (s3://, gs://, http://, https://)
+    is_remote = isinstance(source, str) and re.match(r"^(s3|gs|https?)://", source)
+
+    if is_remote:
+        # Remote file: pass URI directly to rasterio (no Path operations)
+        cog_files = [source]
+        source_path = Path(source.split("/")[-1])  # for product_id derivation only
     else:
-        raise FileNotFoundError(f"Source path does not exist: {source}")
+        source_path = Path(source)
+        # Discover COG files
+        if source_path.is_file():
+            cog_files = [str(source_path)]
+        elif source_path.is_dir():
+            cog_files_paths = sorted(source_path.glob(glob_pattern))
+            if not cog_files_paths:
+                raise FileNotFoundError(f"No files matching '{glob_pattern}' found in {source}")
+            cog_files = [str(f) for f in cog_files_paths]
+        else:
+            raise FileNotFoundError(f"Source path does not exist: {source}")
 
     # Derive product_id from directory name if not provided
     if product_id is None:
-        if source_path.is_dir():
+        if is_remote:
+            # Extract a meaningful name from the URI path
+            uri_parts = source.rstrip("/").split("/")
+            product_id = uri_parts[-2] if len(uri_parts) >= 3 else "default"
+        elif source_path.is_dir():
             product_id = source_path.name
         else:
             product_id = source_path.parent.name or "default"
@@ -205,6 +218,10 @@ def ingest(
             base = str(resolved.parent) + "/"
         vcc_data_path = base
         vcc_prefix = f"file://{base}"
+    elif vcc_prefix is None and is_remote and storage_type == "s3":
+        # Extract bucket from S3 URI: s3://bucket/path/... -> s3://bucket/
+        bucket_name = source.replace("s3://", "").split("/")[0]
+        vcc_prefix = f"s3://{bucket_name}/"
 
     # Initialize pipeline
     from pixelquery.io.ingest import IcechunkIngestionPipeline
@@ -223,32 +240,46 @@ def ingest(
     # Build batch ingest info
     cog_infos = []
     for cog_file in cog_files:
+        # Extract filename for date parsing (works for both local paths and URIs)
+        if is_remote:
+            filename = cog_file.rstrip("/").split("/")[-1]
+        else:
+            filename = Path(cog_file).name
+
         # Parse date from filename
-        acq_time = _parse_date_from_filename(cog_file.name, date_pattern)
+        acq_time = _parse_date_from_filename(filename, date_pattern)
         if acq_time is None:
-            # Fallback to file modification time
-            mtime = cog_file.stat().st_mtime
-            acq_time = datetime.fromtimestamp(mtime, tz=UTC)
-            logger.warning(
-                "No date found in filename '%s', using file mtime: %s",
-                cog_file.name,
-                acq_time.date(),
-            )
+            if is_remote:
+                # Cannot stat remote files; use current time as fallback
+                acq_time = datetime.now(tz=UTC)
+                logger.warning(
+                    "No date found in remote filename '%s', using current time",
+                    filename,
+                )
+            else:
+                # Fallback to file modification time
+                mtime = Path(cog_file).stat().st_mtime
+                acq_time = datetime.fromtimestamp(mtime, tz=UTC)
+                logger.warning(
+                    "No date found in filename '%s', using file mtime: %s",
+                    filename,
+                    acq_time.date(),
+                )
 
         info = {
-            "cog_path": str(cog_file.resolve()),
+            "cog_path": cog_file if is_remote else str(Path(cog_file).resolve()),
             "acquisition_time": acq_time,
             "product_id": product_id,
             "band_names": band_names,
         }
 
-        # Match mask file by date
-        if mask_dir and mask_dir.is_dir():
-            matched = _match_mask_file(cog_file, mask_dir, date_pattern)
+        # Match mask file by date (local files only)
+        if not is_remote and mask_dir and mask_dir.is_dir():
+            matched = _match_mask_file(Path(cog_file), mask_dir, date_pattern)
             if matched:
                 info["mask_path"] = str(matched.resolve())
             else:
-                logger.warning("No mask file found for %s", cog_file.name)
+                logger.warning("No mask file found for %s", filename)
 
         cog_infos.append(info)
 
@@ -272,10 +303,16 @@ def ingest(
 
     elapsed = time.perf_counter() - start
 
+    # For remote warehouses, keep URI as-is; for local, resolve to absolute path
+    if re.match(r"^(s3|gs|https?)://", warehouse):
+        resolved_warehouse = warehouse
+    else:
+        resolved_warehouse = str(Path(warehouse).resolve())
+
     result = IngestResult(
         scene_count=len(group_names),
         group_names=group_names,
-        warehouse_path=str(Path(warehouse).resolve()),
+        warehouse_path=resolved_warehouse,
         elapsed=elapsed,
         errors=errors,
     )

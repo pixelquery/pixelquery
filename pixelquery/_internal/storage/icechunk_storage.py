@@ -73,11 +73,13 @@ class IcechunkStorageManager:
 
         import icechunk
 
-        # Ensure repo directory exists
-        repo_dir = Path(self.repo_path)
-        repo_dir.mkdir(parents=True, exist_ok=True)
-
-        icechunk_dir = str(repo_dir / ".icechunk")
+        # Ensure repo directory exists (local only)
+        if self.storage_type == "local":
+            repo_dir = Path(self.repo_path)
+            repo_dir.mkdir(parents=True, exist_ok=True)
+            icechunk_dir = str(repo_dir / ".icechunk")
+        else:
+            icechunk_dir = self.repo_path  # S3/GCS: path used as prefix
 
         # Build repository config with VCC
         config = icechunk.RepositoryConfig.default()
@@ -93,11 +95,27 @@ class IcechunkStorageManager:
                 bucket=self.storage_config["bucket"],
                 prefix=self.storage_config.get("prefix", ""),
                 region=self.storage_config.get("region"),
+                endpoint_url=self.storage_config.get("endpoint_url"),
+                allow_http=bool(self.storage_config.get("allow_http", False)),
+                access_key_id=self.storage_config.get("access_key_id"),
+                secret_access_key=self.storage_config.get("secret_access_key"),
+                force_path_style=bool(self.storage_config.get("force_path_style", False)),
             )
-            if self.vcc_prefix and self.vcc_data_path:
-                vcc_store = icechunk.local_filesystem_store(self.vcc_data_path)
-                container = icechunk.VirtualChunkContainer(self.vcc_prefix, vcc_store)
-                config.set_virtual_chunk_container(container)
+            if self.vcc_prefix:
+                if self.vcc_prefix.startswith("s3://"):
+                    # S3 VCC: use S3 store with same endpoint/credentials
+                    vcc_store = icechunk.s3_store(
+                        endpoint_url=self.storage_config.get("endpoint_url"),
+                        allow_http=bool(self.storage_config.get("allow_http", False)),
+                        force_path_style=bool(self.storage_config.get("force_path_style", False)),
+                    )
+                elif self.vcc_data_path:
+                    vcc_store = icechunk.local_filesystem_store(self.vcc_data_path)
+                else:
+                    vcc_store = None
+                if vcc_store is not None:
+                    container = icechunk.VirtualChunkContainer(self.vcc_prefix, vcc_store)
+                    config.set_virtual_chunk_container(container)
         elif self.storage_type == "gcs":
             storage = icechunk.gcs_storage(
                 bucket=self.storage_config["bucket"],
@@ -110,12 +128,23 @@ class IcechunkStorageManager:
         else:
             raise ValueError(f"Unknown storage type: {self.storage_type}")
 
+        # Build VCC access credentials
+        vcc_credentials = None
+        if self.vcc_prefix and self.vcc_prefix.startswith("s3://"):
+            ak = self.storage_config.get("access_key_id")
+            sk = self.storage_config.get("secret_access_key")
+            if ak and sk:
+                vcc_credentials = icechunk.s3_static_credentials(
+                    access_key_id=ak,
+                    secret_access_key=sk,
+                )
+
         # Create or open repository
         try:
             self._repo = icechunk.Repository.open(  # type: ignore[assignment]
                 storage=storage,
                 config=config,
-                authorize_virtual_chunk_access={self.vcc_prefix: None},
+                authorize_virtual_chunk_access={self.vcc_prefix: vcc_credentials},
             )
             logger.info("Opened existing Icechunk repo at %s", self.repo_path)
         except Exception:
