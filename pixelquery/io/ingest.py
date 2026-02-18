@@ -688,17 +688,16 @@ class IcechunkIngestionPipeline:
             vcc_prefix: Virtual Chunk Container URL prefix
             vcc_data_path: Local filesystem path for VCC store
         """
-        from pixelquery._internal.storage.icechunk_storage import IcechunkStorageManager
+        from pixelquery._internal.storage.icechunk_storage import get_storage_manager
         from pixelquery.io.icechunk_writer import IcechunkVirtualWriter
 
-        self.storage = IcechunkStorageManager(
+        self.storage = get_storage_manager(
             repo_path,
             storage_type=storage_type,
             storage_config=storage_config,
             vcc_prefix=vcc_prefix,
             vcc_data_path=vcc_data_path,
         )
-        self.storage.initialize()
         self.writer = IcechunkVirtualWriter(self.storage)
 
     def ingest_cog(
@@ -728,16 +727,17 @@ class IcechunkIngestionPipeline:
         Returns:
             Group name (e.g. "scene_20250101_a1b2c3d4")
         """
-        return self.writer.ingest_cog(
-            cog_path=cog_path,
-            acquisition_time=acquisition_time,
-            product_id=product_id,
-            band_names=band_names,
-            bounds=bounds,
-            crs=crs,
-            cloud_cover=cloud_cover,
-            mask_path=mask_path,
-        )
+        with self.storage.write_lock:
+            return self.writer.ingest_cog(
+                cog_path=cog_path,
+                acquisition_time=acquisition_time,
+                product_id=product_id,
+                band_names=band_names,
+                bounds=bounds,
+                crs=crs,
+                cloud_cover=cloud_cover,
+                mask_path=mask_path,
+            )
 
     def ingest_cogs(
         self,
@@ -754,7 +754,8 @@ class IcechunkIngestionPipeline:
         Returns:
             List of group names
         """
-        return self.writer.ingest_cogs_batch(cog_infos, commit_message=message)
+        with self.storage.write_lock:
+            return self.writer.ingest_cogs_batch(cog_infos, commit_message=message)
 
     def __repr__(self) -> str:
         return f"<IcechunkIngestionPipeline repo={self.storage.repo_path}>"

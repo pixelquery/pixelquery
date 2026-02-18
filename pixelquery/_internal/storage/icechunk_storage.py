@@ -3,13 +3,51 @@ Icechunk Storage Manager
 
 Manages an Icechunk repository for virtual zarr storage of COG references.
 Replaces IcebergStorageManager for the virtual dataset backend.
+
+Thread-safety: Use ``get_storage_manager()`` to obtain a singleton per
+warehouse path.  Each manager exposes a ``write_lock`` for serializing
+concurrent writes (e.g. parallel Kafka consumers).
 """
 
 import logging
+import threading
 from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# ---- Singleton registry (one manager per resolved warehouse path) ----------
+_managers: dict[str, "IcechunkStorageManager"] = {}
+_managers_lock = threading.Lock()
+
+
+def get_storage_manager(
+    repo_path: str,
+    storage_type: str = "local",
+    storage_config: dict[str, Any] | None = None,
+    vcc_prefix: str | None = None,
+    vcc_data_path: str | None = None,
+) -> "IcechunkStorageManager":
+    """Get or create a singleton :class:`IcechunkStorageManager` for *repo_path*.
+
+    Concurrent calls with the same resolved path will receive the same
+    already-initialised instance, avoiding repeated ``Repository.open()``
+    round-trips and potential creation race-conditions.
+    """
+    key = str(Path(repo_path).resolve())
+    if key not in _managers:
+        with _managers_lock:
+            if key not in _managers:  # double-checked locking
+                mgr = IcechunkStorageManager(
+                    repo_path,
+                    storage_type=storage_type,
+                    storage_config=storage_config,
+                    vcc_prefix=vcc_prefix,
+                    vcc_data_path=vcc_data_path,
+                )
+                mgr.initialize()
+                _managers[key] = mgr
+    return _managers[key]
 
 
 class IcechunkStorageManager:
@@ -48,6 +86,7 @@ class IcechunkStorageManager:
         self._repo = None
         self._registry = None
         self._initialized = False
+        self._write_lock = threading.Lock()
 
         # Derive VCC settings
         # icechunk requires file:// prefix to include a path beyond root "/"
@@ -139,7 +178,7 @@ class IcechunkStorageManager:
                     secret_access_key=sk,
                 )
 
-        # Create or open repository
+        # Create or open repository (with retry for concurrent access)
         try:
             self._repo = icechunk.Repository.open(  # type: ignore[assignment]
                 storage=storage,
@@ -148,11 +187,20 @@ class IcechunkStorageManager:
             )
             logger.info("Opened existing Icechunk repo at %s", self.repo_path)
         except Exception:
-            self._repo = icechunk.Repository.create(  # type: ignore[assignment]
-                storage=storage,
-                config=config,
-            )
-            logger.info("Created new Icechunk repo at %s", self.repo_path)
+            try:
+                self._repo = icechunk.Repository.create(  # type: ignore[assignment]
+                    storage=storage,
+                    config=config,
+                )
+                logger.info("Created new Icechunk repo at %s", self.repo_path)
+            except Exception:
+                # Another thread/process may have created the repo concurrently
+                self._repo = icechunk.Repository.open(  # type: ignore[assignment]
+                    storage=storage,
+                    config=config,
+                    authorize_virtual_chunk_access={self.vcc_prefix: vcc_credentials},  # type: ignore[dict-item]
+                )
+                logger.info("Opened Icechunk repo at %s (created by another session)", self.repo_path)
 
         self._initialized = True
 
@@ -173,6 +221,11 @@ class IcechunkStorageManager:
             self._registry = ObjectStoreRegistry()  # type: ignore[assignment]
             self._registry.register("file://", obstore.store.LocalStore())  # type: ignore[attr-defined]
         return self._registry
+
+    @property
+    def write_lock(self) -> threading.Lock:
+        """Lock for serializing writes to this repository."""
+        return self._write_lock
 
     def writable_session(self, branch: str = "main"):
         """Get a writable session."""
