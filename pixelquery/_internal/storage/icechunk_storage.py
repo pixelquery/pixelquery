@@ -222,6 +222,15 @@ class IcechunkStorageManager:
 
             self._registry = ObjectStoreRegistry()  # type: ignore[assignment]
             self._registry.register("file://", obstore.store.LocalStore())  # type: ignore[attr-defined]
+            if self.storage_type == "s3":
+                s3_store = obstore.store.S3Store(
+                    endpoint_url=self.storage_config.get("endpoint_url"),
+                    access_key_id=self.storage_config.get("access_key_id"),
+                    secret_access_key=self.storage_config.get("secret_access_key"),
+                    region=self.storage_config.get("region"),
+                    allow_http=self.storage_config.get("allow_http", False),
+                )
+                self._registry.register("s3://", s3_store)  # type: ignore[attr-defined]
         return self._registry
 
     @property
