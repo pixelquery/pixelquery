@@ -104,7 +104,7 @@ class IcechunkStorageManager:
             if self.vcc_prefix:
                 if self.vcc_prefix.startswith("s3://"):
                     # S3 VCC: use S3 store with same endpoint/credentials
-                    vcc_store = icechunk.s3_store(
+                    vcc_store = icechunk.s3_store(  # type: ignore[assignment]
                         endpoint_url=self.storage_config.get("endpoint_url"),
                         allow_http=bool(self.storage_config.get("allow_http", False)),
                         force_path_style=bool(self.storage_config.get("force_path_style", False)),
@@ -144,7 +144,7 @@ class IcechunkStorageManager:
             self._repo = icechunk.Repository.open(  # type: ignore[assignment]
                 storage=storage,
                 config=config,
-                authorize_virtual_chunk_access={self.vcc_prefix: vcc_credentials},
+                authorize_virtual_chunk_access={self.vcc_prefix: vcc_credentials},  # type: ignore[dict-item]
             )
             logger.info("Opened existing Icechunk repo at %s", self.repo_path)
         except Exception:
