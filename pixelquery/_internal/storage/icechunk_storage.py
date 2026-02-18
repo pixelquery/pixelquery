@@ -200,7 +200,9 @@ class IcechunkStorageManager:
                     config=config,
                     authorize_virtual_chunk_access={self.vcc_prefix: vcc_credentials},  # type: ignore[dict-item]
                 )
-                logger.info("Opened Icechunk repo at %s (created by another session)", self.repo_path)
+                logger.info(
+                    "Opened Icechunk repo at %s (created by another session)", self.repo_path
+                )
 
         self._initialized = True
 
