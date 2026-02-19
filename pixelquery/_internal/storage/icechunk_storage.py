@@ -176,24 +176,29 @@ class IcechunkStorageManager:
         else:
             raise ValueError(f"Unknown storage type: {self.storage_type}")
 
-        # Build VCC access credentials
-        vcc_credentials = None
+        # Build VCC access credentials using containers_credentials() wrapper
+        # which converts provider-specific creds to the Credentials type expected
+        # by authorize_virtual_chunk_access
         if self.vcc_prefix and self.vcc_prefix.startswith("s3://"):
             ak = self.storage_config.get("access_key_id")
             sk = self.storage_config.get("secret_access_key")
-            if ak and sk:
-                vcc_credentials = icechunk.s3_static_credentials(
-                    access_key_id=ak,
-                    secret_access_key=sk,
-                )
+            raw_cred = (
+                icechunk.s3_credentials(access_key_id=ak, secret_access_key=sk)
+                if ak and sk
+                else None
+            )
+            vcc_auth = icechunk.containers_credentials({self.vcc_prefix: raw_cred})
+        elif self.vcc_prefix:
+            # Local / other VCC: authorize with None credentials
+            vcc_auth = icechunk.containers_credentials({self.vcc_prefix: None})
 
         # Create or open repository (with retry for concurrent access)
+        open_kwargs: dict[str, Any] = {"storage": storage, "config": config}
+        if vcc_auth:
+            open_kwargs["authorize_virtual_chunk_access"] = vcc_auth
+
         try:
-            self._repo = icechunk.Repository.open(  # type: ignore[assignment]
-                storage=storage,
-                config=config,
-                authorize_virtual_chunk_access={self.vcc_prefix: vcc_credentials},  # type: ignore[dict-item]
-            )
+            self._repo = icechunk.Repository.open(**open_kwargs)  # type: ignore[assignment]
             logger.info("Opened existing Icechunk repo at %s", self.repo_path)
         except Exception:
             try:
@@ -204,11 +209,7 @@ class IcechunkStorageManager:
                 logger.info("Created new Icechunk repo at %s", self.repo_path)
             except Exception:
                 # Another thread/process may have created the repo concurrently
-                self._repo = icechunk.Repository.open(  # type: ignore[assignment]
-                    storage=storage,
-                    config=config,
-                    authorize_virtual_chunk_access={self.vcc_prefix: vcc_credentials},  # type: ignore[dict-item]
-                )
+                self._repo = icechunk.Repository.open(**open_kwargs)  # type: ignore[assignment]
                 logger.info(
                     "Opened Icechunk repo at %s (created by another session)", self.repo_path
                 )
