@@ -239,22 +239,24 @@ class IcechunkStorageManager:
                 else:
                     bucket = self.storage_config.get("bucket", "")
                 if bucket:
-                    # Use from_url with aws_ prefixed config keys to avoid
-                    # pyo3-object_store panic in __getnewargs_ex__() serialization
-                    s3_config: dict[str, str] = {}
-                    if self.storage_config.get("endpoint_url"):
-                        s3_config["aws_endpoint_url"] = self.storage_config["endpoint_url"]
-                    if self.storage_config.get("access_key_id"):
-                        s3_config["aws_access_key_id"] = self.storage_config["access_key_id"]
-                    if self.storage_config.get("secret_access_key"):
-                        s3_config["aws_secret_access_key"] = self.storage_config[
-                            "secret_access_key"
-                        ]
-                    if self.storage_config.get("region"):
-                        s3_config["aws_region"] = self.storage_config["region"]
+                    # Set AWS env vars so S3Store reads them automatically.
+                    # This avoids pyo3-object_store Rust panic when virtual_tiff
+                    # serializes the store via __getnewargs_ex__().
+                    import os
+
+                    for env_key, cfg_key in [
+                        ("AWS_ENDPOINT_URL", "endpoint_url"),
+                        ("AWS_ACCESS_KEY_ID", "access_key_id"),
+                        ("AWS_SECRET_ACCESS_KEY", "secret_access_key"),
+                        ("AWS_REGION", "region"),
+                    ]:
+                        val = self.storage_config.get(cfg_key)
+                        if val:
+                            os.environ.setdefault(env_key, str(val))
                     if self.storage_config.get("allow_http"):
-                        s3_config["aws_allow_http"] = "true"
-                    s3_store = obstore.store.S3Store.from_url(f"s3://{bucket}/", config=s3_config)  # type: ignore[arg-type]
+                        os.environ.setdefault("AWS_ALLOW_HTTP", "true")
+
+                    s3_store = obstore.store.S3Store(bucket=bucket)
                     self._registry.register(f"s3://{bucket}/", s3_store)  # type: ignore[attr-defined]
         return self._registry
 
