@@ -101,6 +101,15 @@ class IcechunkStorageManager:
                 base += "/"
             self.vcc_prefix = f"file://{base}"
             self.vcc_data_path = base
+        elif vcc_prefix is None and storage_type == "s3":
+            # Auto-derive VCC prefix from S3 bucket in storage_config
+            bucket = (storage_config or {}).get("bucket", "")
+            if bucket:
+                self.vcc_prefix = f"s3://{bucket}/"
+                self.vcc_data_path = None  # type: ignore[assignment]
+            else:
+                self.vcc_prefix = "file:///tmp/"
+                self.vcc_data_path = "/tmp/"
         else:
             self.vcc_prefix = vcc_prefix or "file:///tmp/"
             self.vcc_data_path = vcc_data_path or "/tmp/"
@@ -223,14 +232,21 @@ class IcechunkStorageManager:
             self._registry = ObjectStoreRegistry()  # type: ignore[assignment]
             self._registry.register("file://", obstore.store.LocalStore())  # type: ignore[attr-defined]
             if self.storage_type == "s3":
-                s3_store = obstore.store.S3Store(
-                    endpoint_url=self.storage_config.get("endpoint_url"),
-                    access_key_id=self.storage_config.get("access_key_id"),
-                    secret_access_key=self.storage_config.get("secret_access_key"),
-                    region=self.storage_config.get("region"),
-                    allow_http=self.storage_config.get("allow_http", False),
-                )
-                self._registry.register("s3://", s3_store)  # type: ignore[attr-defined]
+                # Extract bucket from VCC prefix or storage_config
+                if self.vcc_prefix and self.vcc_prefix.startswith("s3://"):
+                    bucket = self.vcc_prefix.replace("s3://", "").strip("/").split("/")[0]
+                else:
+                    bucket = self.storage_config.get("bucket", "")
+                if bucket:
+                    s3_store = obstore.store.S3Store(
+                        bucket=bucket,
+                        endpoint_url=self.storage_config.get("endpoint_url"),
+                        access_key_id=self.storage_config.get("access_key_id"),
+                        secret_access_key=self.storage_config.get("secret_access_key"),
+                        region=self.storage_config.get("region"),
+                        allow_http=self.storage_config.get("allow_http", False),
+                    )
+                    self._registry.register(f"s3://{bucket}/", s3_store)  # type: ignore[attr-defined]
         return self._registry
 
     @property
