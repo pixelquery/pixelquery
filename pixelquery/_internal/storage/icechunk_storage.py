@@ -238,14 +238,22 @@ class IcechunkStorageManager:
                 else:
                     bucket = self.storage_config.get("bucket", "")
                 if bucket:
-                    s3_store = obstore.store.S3Store(
-                        bucket=bucket,
-                        endpoint_url=self.storage_config.get("endpoint_url"),
-                        access_key_id=self.storage_config.get("access_key_id"),
-                        secret_access_key=self.storage_config.get("secret_access_key"),
-                        region=self.storage_config.get("region"),
-                        allow_http=self.storage_config.get("allow_http", False),
-                    )
+                    # Use from_url with aws_ prefixed config keys to avoid
+                    # pyo3-object_store panic in __getnewargs_ex__() serialization
+                    s3_config: dict[str, str] = {}
+                    if self.storage_config.get("endpoint_url"):
+                        s3_config["aws_endpoint_url"] = self.storage_config["endpoint_url"]
+                    if self.storage_config.get("access_key_id"):
+                        s3_config["aws_access_key_id"] = self.storage_config["access_key_id"]
+                    if self.storage_config.get("secret_access_key"):
+                        s3_config["aws_secret_access_key"] = self.storage_config[
+                            "secret_access_key"
+                        ]
+                    if self.storage_config.get("region"):
+                        s3_config["aws_region"] = self.storage_config["region"]
+                    if self.storage_config.get("allow_http"):
+                        s3_config["aws_allow_http"] = "true"
+                    s3_store = obstore.store.S3Store.from_url(f"s3://{bucket}/", config=s3_config)  # type: ignore[arg-type]
                     self._registry.register(f"s3://{bucket}/", s3_store)  # type: ignore[attr-defined]
         return self._registry
 
