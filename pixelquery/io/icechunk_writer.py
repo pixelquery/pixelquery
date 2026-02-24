@@ -62,7 +62,8 @@ class IcechunkVirtualWriter:
         from virtual_tiff import VirtualTIFF
         from virtualizarr import open_virtual_dataset
 
-        # Auto-detect bounds and CRS from COG if not provided
+        # Auto-detect bounds, CRS, and resolution from COG if not provided
+        resolution = None
         if bounds is None or crs is None:
             try:
                 import rasterio
@@ -72,6 +73,7 @@ class IcechunkVirtualWriter:
                         crs = str(src.crs)
                     if bounds is None:
                         bounds = src.bounds
+                    resolution = (abs(src.res[0]), abs(src.res[1]))
             except Exception as e:
                 logger.warning("Could not read COG metadata: %s", e)
 
@@ -127,11 +129,32 @@ class IcechunkVirtualWriter:
             scene_attrs["bounds"] = [float(b) for b in bounds]  # type: ignore[misc]
         if "0" in vds:
             scene_attrs["shape"] = list(vds["0"].shape)  # type: ignore[arg-type]
+        if resolution is not None:
+            scene_attrs["resolution"] = [resolution[0], resolution[1]]
 
         scene_group.attrs.update(scene_attrs)
 
         # Update consolidated scenes index for fast listing
         self._update_scenes_index(store, group_name, scene_attrs)
+
+        # Ingest cloud mask as virtual ref if mask_path is provided
+        if mask_path:
+            mask_group = self.ingest_mask_cog(
+                mask_path=mask_path,
+                parent_group_name=group_name,
+                session=session,
+            )
+            # Store mask_group reference in scene attrs
+            scene_group.attrs["mask_group"] = mask_group
+
+            # Also update _scenes_index entry with mask_group
+            idx_group = root["_scenes_index"]
+            scenes_list = list(idx_group.attrs.get("scenes", []))
+            for entry in scenes_list:
+                if entry.get("group") == group_name:
+                    entry["mask_group"] = mask_group
+                    break
+            idx_group.attrs["scenes"] = scenes_list
 
         # Commit if we own the session
         if own_session:
@@ -139,6 +162,74 @@ class IcechunkVirtualWriter:
             logger.info("Ingested %s (snapshot: %s)", group_name, snapshot_id)
 
         return group_name
+
+    def ingest_mask_cog(
+        self,
+        mask_path: str,
+        parent_group_name: str,
+        session=None,
+    ) -> str:
+        """
+        Register a cloud mask COG as a virtual zarr group.
+
+        The mask is stored alongside the data scene as a separate zarr group
+        with virtual chunk references to the original mask file. This enables
+        GDAL-free cloud mask reading at query time via zarr/Icechunk.
+
+        Args:
+            mask_path: Path to mask COG file (local or URL)
+            parent_group_name: Group name of the parent data scene
+            session: Existing writable session
+
+        Returns:
+            Mask group name (e.g. "mask_scene_20250101_a1b2c3d4")
+        """
+        from virtual_tiff import VirtualTIFF
+        from virtualizarr import open_virtual_dataset
+
+        mask_group_name = f"mask_{parent_group_name}"
+
+        # Build file URL
+        if not mask_path.startswith(("file://", "s3://", "gs://", "http://", "https://")):
+            url = f"file://{mask_path}"
+        else:
+            url = mask_path
+
+        # Create virtual dataset from mask COG (no data copy)
+        vds = open_virtual_dataset(
+            url,
+            registry=self.storage.registry,
+            parser=VirtualTIFF(ifd=0),
+        )
+
+        # Get or create session
+        own_session = session is None
+        if own_session:
+            session = self.storage.writable_session()
+
+        store = session.store
+
+        # Write virtual zarr references
+        vds.virtualize.to_icechunk(store, group=mask_group_name)
+
+        # Store mask metadata as group attrs
+        import zarr
+
+        root = zarr.open_group(store, mode="a")
+        mask_group = root[mask_group_name]
+        mask_group.attrs.update({
+            "source_file": str(mask_path),
+            "parent_group": parent_group_name,
+            "type": "cloud_mask",
+        })
+        if "0" in vds:
+            mask_group.attrs["shape"] = list(vds["0"].shape)
+
+        if own_session:
+            snapshot_id = self.storage.commit(session, f"Ingest mask {mask_group_name}")
+            logger.info("Ingested mask %s (snapshot: %s)", mask_group_name, snapshot_id)
+
+        return mask_group_name
 
     def ingest_cogs_batch(
         self,
@@ -193,6 +284,7 @@ class IcechunkVirtualWriter:
             "acquisition_time": scene_attrs.get("acquisition_time"),
             "product_id": scene_attrs.get("product_id"),
             "bounds": scene_attrs.get("bounds"),
+            "crs": scene_attrs.get("crs"),
             "band_names": scene_attrs.get("band_names"),
             "mask_source_file": scene_attrs.get("mask_source_file"),
         }
