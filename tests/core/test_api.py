@@ -4,6 +4,7 @@ Tests for public API functions
 
 import numpy as np
 import pytest
+import xarray as xr
 
 from pixelquery.core.api import compute_evi, compute_ndvi, open_dataset
 from pixelquery.core.dataarray import DataArray
@@ -106,3 +107,21 @@ class TestComputeEVI:
 
         assert isinstance(evi, DataArray)
         assert evi.shape == (10, 256, 256)
+
+
+class TestComputeNdviXarrayInput:
+    """Test compute_ndvi/evi with native xr.DataArray."""
+
+    def test_ndvi_with_xr_dataarrays(self):
+        red = xr.DataArray(np.full((10, 10), 0.1))
+        nir = xr.DataArray(np.full((10, 10), 0.5))
+        result = compute_ndvi(red, nir)
+        expected = (0.5 - 0.1) / (0.5 + 0.1)
+        np.testing.assert_allclose(result.values, expected, rtol=1e-5)
+
+    def test_evi_with_xr_dataarrays(self):
+        blue = xr.DataArray(np.full((10, 10), 0.05))
+        red = xr.DataArray(np.full((10, 10), 0.1))
+        nir = xr.DataArray(np.full((10, 10), 0.5))
+        result = compute_evi(blue, red, nir)
+        assert not np.any(np.isnan(result.values))

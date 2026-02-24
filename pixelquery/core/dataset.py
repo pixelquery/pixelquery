@@ -6,6 +6,7 @@ Provides a familiar interface for data scientists working with satellite imagery
 
 from __future__ import annotations
 
+import warnings
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
@@ -65,6 +66,12 @@ class Dataset:
             data: Band data dictionary
             metadata: Additional metadata
         """
+        warnings.warn(
+            "pixelquery.Dataset is deprecated. Use pq.open_xarray() which returns "
+            "a native xr.Dataset. See migration guide in README.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.tile_id = tile_id
         self.time_range = time_range
         self.bands = bands or []

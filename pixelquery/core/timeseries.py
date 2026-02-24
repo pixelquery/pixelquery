@@ -60,10 +60,19 @@ def timeseries(
         **kwargs,
     )
 
+    # Transform lon/lat (EPSG:4326) to dataset CRS if needed
+    query_x, query_y = lon, lat
+    ds_crs = ds.attrs.get("crs")
+    if ds_crs:
+        from pixelquery.core.api import _needs_crs_transform, _transform_point
+
+        if _needs_crs_transform("EPSG:4326", ds_crs):
+            query_x, query_y = _transform_point(lon, lat, "EPSG:4326", ds_crs)
+
     # Select nearest pixel to (lon, lat)
     # In most satellite data, x corresponds to lon-like and y to lat-like coords
     if ("x" in ds.dims and "y" in ds.dims) or ("x" in ds.coords and "y" in ds.coords):
-        point = ds.sel(x=lon, y=lat, method="nearest")
+        point = ds.sel(x=query_x, y=query_y, method="nearest")
     else:
         # Fallback: use integer indexing with a warning
         logger.warning(

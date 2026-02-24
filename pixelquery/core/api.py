@@ -10,12 +10,63 @@ Supports two storage backends:
 
 import logging
 from datetime import datetime
-from typing import Any
+from typing import Any, Union
+
+import xarray as xr
 
 from pixelquery.core.dataarray import DataArray
 from pixelquery.core.dataset import Dataset
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# CRS transformation helpers (pyproj is a transitive dep of rasterio)
+# ---------------------------------------------------------------------------
+
+
+def _needs_crs_transform(src_crs: str | None, dst_crs: str | None) -> bool:
+    """Return True when *src_crs* and *dst_crs* differ."""
+    if not src_crs or not dst_crs:
+        return False
+    from pyproj import CRS
+
+    return CRS(src_crs) != CRS(dst_crs)
+
+
+def _transform_bounds(
+    bounds: tuple[float, float, float, float],
+    src_crs: str,
+    dst_crs: str,
+) -> tuple[float, float, float, float]:
+    """Transform (minx, miny, maxx, maxy) between coordinate reference systems."""
+    from pyproj import Transformer
+
+    t = Transformer.from_crs(src_crs, dst_crs, always_xy=True)
+    x1, y1 = t.transform(bounds[0], bounds[1])
+    x2, y2 = t.transform(bounds[2], bounds[3])
+    return (min(x1, x2), min(y1, y2), max(x1, x2), max(y1, y2))
+
+
+def _transform_point(
+    x: float, y: float, src_crs: str, dst_crs: str
+) -> tuple[float, float]:
+    """Transform a single point between coordinate reference systems."""
+    from pyproj import Transformer
+
+    t = Transformer.from_crs(src_crs, dst_crs, always_xy=True)
+    return t.transform(x, y)
+
+
+def _transform_geometry(geometry, src_crs: str, dst_crs: str):
+    """Transform a GeoJSON dict or shapely geometry between CRS."""
+    from pyproj import Transformer
+    from shapely.geometry import shape
+    from shapely.ops import transform as shapely_transform
+
+    t = Transformer.from_crs(src_crs, dst_crs, always_xy=True)
+    geom = shape(geometry) if isinstance(geometry, dict) else geometry
+    return shapely_transform(t.transform, geom)
 
 
 def open_dataset(
@@ -76,8 +127,21 @@ def open_dataset(
 
     from pixelquery.catalog import LocalCatalog
 
+    # Check if S3/GCS path (can't use Path for remote URIs)
+    is_remote = warehouse_path.startswith(("s3://", "gs://", "http://", "https://"))
+
     # Check if Icechunk repository
-    if (Path(warehouse_path) / ".icechunk").exists() and storage_backend in ("auto", "icechunk"):
+    if is_remote and storage_backend in ("auto", "icechunk"):
+        logger.info("Remote path detected, routing to open_xarray()")
+        xr_ds = open_xarray(warehouse_path, time_range=time_range, bands=bands, **kwargs)
+        return Dataset(
+            tile_id=tile_id or "icechunk",
+            time_range=time_range,
+            bands=bands or [],
+            data={"xarray": xr_ds},
+            metadata={"warehouse_path": warehouse_path, "storage_backend": "icechunk"},
+        )
+    elif not is_remote and (Path(warehouse_path) / ".icechunk").exists() and storage_backend in ("auto", "icechunk"):
         logger.info("Detected Icechunk repository, use open_xarray() for best experience")
         # Route to open_xarray and wrap result
         xr_ds = open_xarray(warehouse_path, time_range=time_range, bands=bands, **kwargs)
@@ -185,6 +249,7 @@ def open_xarray(
     product_id: str | None = None,
     snapshot_id: str | None = None,
     cloud_mask: bool = False,
+    bounds_crs: str | None = None,
     **kwargs,
 ):
     """
@@ -201,6 +266,9 @@ def open_xarray(
         bands: Band name filter (e.g., ["red", "nir"])
         product_id: Product identifier filter
         snapshot_id: Icechunk snapshot ID for Time Travel queries
+        bounds_crs: CRS of *bounds* (e.g. "EPSG:4326"). When provided,
+                    bounds are transformed to the dataset CRS for both
+                    scene filtering and pixel crop.
         **kwargs: Passed to IcechunkStorageManager (vcc_prefix, vcc_data_path, etc.)
 
     Returns:
@@ -251,14 +319,26 @@ def open_xarray(
     storage.initialize()
 
     reader = IcechunkVirtualReader(storage)
-    return reader.open_xarray(
+    result = reader.open_xarray(
         time_range=time_range,
         bounds=bounds,
         bands=bands,
         product_id=product_id,
         snapshot_id=snapshot_id,
         cloud_mask=cloud_mask,
+        bounds_crs=bounds_crs,
     )
+
+    # Apply pixel-level bbox crop if bounds provided and geo-coordinates exist
+    if bounds and "x" in result.coords and "y" in result.coords:
+        crop_bounds = bounds
+        ds_crs = result.attrs.get("crs")
+        if bounds_crs and _needs_crs_transform(bounds_crs, ds_crs):
+            crop_bounds = _transform_bounds(bounds, bounds_crs, ds_crs)
+        minx, miny, maxx, maxy = crop_bounds
+        result = result.sel(x=slice(minx, maxx), y=slice(maxy, miny))
+
+    return result
 
 
 def open_mfdataset(
@@ -411,8 +491,60 @@ def get_current_snapshot_id(
         return None
 
 
+def crop(ds_or_repo, bounds, crs="EPSG:4326", **kwargs):
+    """
+    Crop dataset to a bounding box.
+
+    Args:
+        ds_or_repo: xr.Dataset with geo-coords, or repo path string
+        bounds: (minx, miny, maxx, maxy) in *crs* coordinates
+        crs: CRS of bounds (default "EPSG:4326"). Automatically
+             transformed to the dataset's native CRS if different.
+        **kwargs: Passed to open_xarray() if ds_or_repo is a path
+
+    Returns:
+        Cropped xr.Dataset
+    """
+    if isinstance(ds_or_repo, str):
+        ds_or_repo = open_xarray(ds_or_repo, **kwargs)
+
+    ds_crs = ds_or_repo.attrs.get("crs")
+    if _needs_crs_transform(crs, ds_crs):
+        bounds = _transform_bounds(bounds, crs, ds_crs)
+
+    from pixelquery.io.icechunk_reader import IcechunkVirtualReader
+
+    return IcechunkVirtualReader.crop(ds_or_repo, bounds)
+
+
+def clip(ds_or_repo, geometry, crs="EPSG:4326", **kwargs):
+    """
+    Clip dataset to a GeoJSON polygon (outside pixels become NaN).
+
+    Args:
+        ds_or_repo: xr.Dataset with geo-coords, or repo path string
+        geometry: GeoJSON dict or shapely geometry in *crs* coordinates
+        crs: CRS of geometry (default "EPSG:4326"). Automatically
+             transformed to the dataset's native CRS if different.
+        **kwargs: Passed to open_xarray() if ds_or_repo is a path
+
+    Returns:
+        Clipped xr.Dataset
+    """
+    if isinstance(ds_or_repo, str):
+        ds_or_repo = open_xarray(ds_or_repo, **kwargs)
+
+    ds_crs = ds_or_repo.attrs.get("crs")
+    if _needs_crs_transform(crs, ds_crs):
+        geometry = _transform_geometry(geometry, crs, ds_crs)
+
+    from pixelquery.io.icechunk_reader import IcechunkVirtualReader
+
+    return IcechunkVirtualReader.clip(ds_or_repo, geometry)
+
+
 # Utility functions
-def compute_ndvi(red: DataArray, nir: DataArray) -> DataArray:
+def compute_ndvi(red: Union[DataArray, xr.DataArray], nir: Union[DataArray, xr.DataArray]) -> Union[DataArray, xr.DataArray]:
     """
     Compute NDVI (Normalized Difference Vegetation Index)
 
@@ -431,14 +563,14 @@ def compute_ndvi(red: DataArray, nir: DataArray) -> DataArray:
 
 
 def compute_evi(
-    blue: DataArray,
-    red: DataArray,
-    nir: DataArray,
+    blue: Union[DataArray, xr.DataArray],
+    red: Union[DataArray, xr.DataArray],
+    nir: Union[DataArray, xr.DataArray],
     G: float = 2.5,
     C1: float = 6.0,
     C2: float = 7.5,
     L: float = 1.0,
-) -> DataArray:
+) -> Union[DataArray, xr.DataArray]:
     """
     Compute EVI (Enhanced Vegetation Index)
 

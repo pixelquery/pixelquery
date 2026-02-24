@@ -5,8 +5,10 @@ Core API, protocols, exceptions, and result types.
 """
 
 from pixelquery.core.api import (
+    clip,
     compute_evi,
     compute_ndvi,
+    crop,
     list_tiles,
     open_dataset,
     open_mfdataset,
@@ -34,8 +36,10 @@ __all__ = [
     "QueryResult",
     "TransactionError",
     "ValidationError",
+    "clip",
     "compute_evi",
     "compute_ndvi",
+    "crop",
     "list_tiles",
     "open_dataset",
     "open_mfdataset",

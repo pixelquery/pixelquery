@@ -4,6 +4,7 @@ DataArray class - xarray-inspired API for single band data
 Represents a single satellite band with labeled dimensions.
 """
 
+import warnings
 from typing import Any, Union
 
 import numpy as np
@@ -56,6 +57,12 @@ class DataArray:
             coords: Coordinate arrays
             attrs: Additional attributes
         """
+        warnings.warn(
+            "pixelquery.DataArray is deprecated. Use xr.DataArray directly with "
+            "pq.open_xarray(). See migration guide in README.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.name = name
         self.data = data if data is not None else np.array([])
         self.dims = dims or {}
