@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 # ---- Singleton registry (one manager per resolved warehouse path) ----------
 _managers: dict[str, "IcechunkStorageManager"] = {}
 _managers_lock = threading.Lock()
+_env_lock = threading.Lock()
 
 
 def get_storage_manager(
@@ -34,7 +35,10 @@ def get_storage_manager(
     already-initialised instance, avoiding repeated ``Repository.open()``
     round-trips and potential creation race-conditions.
     """
-    key = str(Path(repo_path).resolve())
+    if repo_path.startswith(("s3://", "gs://", "http://", "https://")):
+        key = repo_path.rstrip("/")
+    else:
+        key = str(Path(repo_path).resolve())
     if key not in _managers:
         with _managers_lock:
             if key not in _managers:  # double-checked locking
@@ -244,17 +248,18 @@ class IcechunkStorageManager:
                     # serializes the store via __getnewargs_ex__().
                     import os
 
-                    for env_key, cfg_key in [
-                        ("AWS_ENDPOINT_URL", "endpoint_url"),
-                        ("AWS_ACCESS_KEY_ID", "access_key_id"),
-                        ("AWS_SECRET_ACCESS_KEY", "secret_access_key"),
-                        ("AWS_REGION", "region"),
-                    ]:
-                        val = self.storage_config.get(cfg_key)
-                        if val:
-                            os.environ.setdefault(env_key, str(val))
-                    if self.storage_config.get("allow_http"):
-                        os.environ.setdefault("AWS_ALLOW_HTTP", "true")
+                    with _env_lock:
+                        for env_key, cfg_key in [
+                            ("AWS_ENDPOINT_URL", "endpoint_url"),
+                            ("AWS_ACCESS_KEY_ID", "access_key_id"),
+                            ("AWS_SECRET_ACCESS_KEY", "secret_access_key"),
+                            ("AWS_REGION", "region"),
+                        ]:
+                            val = self.storage_config.get(cfg_key)
+                            if val:
+                                os.environ.setdefault(env_key, str(val))
+                        if self.storage_config.get("allow_http"):
+                            os.environ.setdefault("AWS_ALLOW_HTTP", "true")
 
                     s3_store = obstore.store.S3Store(bucket=bucket)
                     self._registry.register(f"s3://{bucket}/", s3_store)  # type: ignore[attr-defined]
