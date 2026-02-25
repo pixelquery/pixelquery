@@ -137,7 +137,7 @@ class PixelQueryS3:
         from obspec_utils.registry import ObjectStoreRegistry
 
         self._s3_store = obstore.store.S3Store(bucket=bucket)
-        self._registry = ObjectStoreRegistry()
+        self._registry: Any = ObjectStoreRegistry()
         self._registry.register(self._prefix, self._s3_store)
 
         # Reader
@@ -234,19 +234,19 @@ class PixelQueryS3:
         if "_scenes_index" not in root:
             idx = root.create_group("_scenes_index")
         else:
-            idx = root["_scenes_index"]
+            idx = root["_scenes_index"]  # type: ignore[assignment]
 
-        existing = list(idx.attrs.get("scenes", []))
+        existing = list(idx.attrs.get("scenes", []))  # type: ignore[arg-type]
         ingested_sources: set[str] = set()
         for s in existing:
-            src = s.get("source_file", "")
+            src = s.get("source_file", "")  # type: ignore[union-attr]
             if src:
-                ingested_sources.add(src)
+                ingested_sources.add(src)  # type: ignore[arg-type]
 
         # Global offset for group naming (avoid index collision across batches)
         offset = len(existing)
 
-        group_names = []
+        group_names: list[str] = []
         skipped = 0
         failed = []
 
@@ -623,7 +623,7 @@ class PixelQueryS3:
             }
             if name not in luts:
                 raise ValueError(f"Unknown colormap: {name}. Choose from: {list(luts)}")
-            cls._COLORMAPS[name] = cls._build_lut(luts[name])
+            cls._COLORMAPS[name] = cls._build_lut(luts[name])  # type: ignore[arg-type]
         return cls._COLORMAPS[name]
 
     @staticmethod
@@ -873,15 +873,15 @@ class PixelQueryS3:
 
         spatial_extent = (
             [
-                min(b[0] for b in all_bounds),
-                min(b[1] for b in all_bounds),
-                max(b[2] for b in all_bounds),
-                max(b[3] for b in all_bounds),
+                min(b[0] for b in all_bounds),  # type: ignore[index]
+                min(b[1] for b in all_bounds),  # type: ignore[index]
+                max(b[2] for b in all_bounds),  # type: ignore[index]
+                max(b[3] for b in all_bounds),  # type: ignore[index]
             ]
             if all_bounds
             else None
         )
-        temporal_extent = [min(all_times), max(all_times)] if all_times else [None, None]
+        temporal_extent = [min(all_times), max(all_times)] if all_times else [None, None]  # type: ignore[type-var]
 
         return {
             "type": "Collection",

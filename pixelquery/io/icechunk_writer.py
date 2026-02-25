@@ -149,10 +149,10 @@ class IcechunkVirtualWriter:
 
             # Also update _scenes_index entry with mask_group
             idx_group = root["_scenes_index"]
-            scenes_list = list(idx_group.attrs.get("scenes", []))
+            scenes_list = list(idx_group.attrs.get("scenes", []))  # type: ignore[arg-type]
             for entry in scenes_list:
-                if entry.get("group") == group_name:
-                    entry["mask_group"] = mask_group
+                if entry.get("group") == group_name:  # type: ignore[union-attr]
+                    entry["mask_group"] = mask_group  # type: ignore[index]
                     break
             idx_group.attrs["scenes"] = scenes_list
 

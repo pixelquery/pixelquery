@@ -336,7 +336,7 @@ def open_xarray(
         crop_bounds = bounds
         ds_crs = result.attrs.get("crs")
         if bounds_crs and _needs_crs_transform(bounds_crs, ds_crs):
-            crop_bounds = _transform_bounds(bounds, bounds_crs, ds_crs)
+            crop_bounds = _transform_bounds(bounds, bounds_crs, ds_crs)  # type: ignore[arg-type]
         minx, miny, maxx, maxy = crop_bounds
         result = result.sel(x=slice(minx, maxx), y=slice(maxy, miny))
 

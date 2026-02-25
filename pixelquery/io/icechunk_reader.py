@@ -103,8 +103,8 @@ class IcechunkVirtualReader:
                 # Transform query bounds to scene CRS if needed
                 qb: tuple[float, float, float, float] = (minx, miny, maxx, maxy)
                 scene_crs = s.get("crs")  # type: ignore[union-attr]
-                if bounds_crs and scene_crs and _needs_crs_transform(bounds_crs, scene_crs):
-                    qb = _transform_bounds(qb, bounds_crs, scene_crs)
+                if bounds_crs and scene_crs and _needs_crs_transform(bounds_crs, scene_crs):  # type: ignore[arg-type]
+                    qb = _transform_bounds(qb, bounds_crs, scene_crs)  # type: ignore[arg-type]
                 if not (sb[2] < qb[0] or sb[0] > qb[2] or sb[3] < qb[1] or sb[1] > qb[3]):  # type: ignore[index, operator]
                     filtered.append(s)
             scenes = filtered
@@ -248,10 +248,10 @@ class IcechunkVirtualReader:
         # Assign real geo-coordinates from bounds metadata
         scene_bounds = attrs.get("bounds")
         if scene_bounds and "y" in data.dims and "x" in data.dims:
-            minx, miny, maxx, maxy = scene_bounds
+            minx, miny, maxx, maxy = scene_bounds  # type: ignore[misc]
             ny, nx = data.sizes["y"], data.sizes["x"]
-            x_res = (maxx - minx) / nx
-            y_res = (maxy - miny) / ny
+            x_res = (maxx - minx) / nx  # type: ignore[operator]
+            y_res = (maxy - miny) / ny  # type: ignore[operator]
             x_coords = np.linspace(minx + x_res / 2, maxx - x_res / 2, nx)
             y_coords = np.linspace(maxy - y_res / 2, miny + y_res / 2, ny)  # top→bottom
             data = data.assign_coords(y=("y", y_coords), x=("x", x_coords))
