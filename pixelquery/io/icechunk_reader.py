@@ -432,6 +432,103 @@ class IcechunkVirtualReader:
         mask_da = xr.DataArray(~inside, dims=["y", "x"], coords={"y": y_vals, "x": x_vals})
         return cropped.where(~mask_da)
 
+    @staticmethod
+    def to_cog(
+        ds: xr.Dataset,
+        output_path: str,
+        *,
+        geometry=None,
+        crs: str = "EPSG:4326",
+        nodata: float = -999.0,
+        overview_levels: list[int] | None = None,
+        compress: str = "DEFLATE",
+        data_var: str = "data",
+    ) -> str:
+        """
+        Export dataset (or polygon clip) to Cloud-Optimized GeoTIFF.
+
+        Args:
+            ds: xr.Dataset with dims (band, y, x) or (y, x)
+            output_path: Output file path (.tif)
+            geometry: Optional GeoJSON dict or shapely geometry for polygon clip.
+                      If provided, pixels outside polygon become nodata.
+            crs: Coordinate reference system string
+            nodata: Nodata value for output
+            overview_levels: Overview pyramid levels (default: [2, 4, 8, 16])
+            compress: Compression method (DEFLATE, LZW, ZSTD)
+            data_var: Name of the data variable in the dataset
+
+        Returns:
+            Output file path
+        """
+        import rasterio
+        from rasterio.transform import from_bounds
+
+        # Apply polygon clip if geometry provided
+        if geometry is not None:
+            ds = IcechunkVirtualReader.clip(ds, geometry)
+
+        if data_var not in ds:
+            raise ValueError(f"Variable '{data_var}' not found in dataset")
+
+        da = ds[data_var]
+        data = da.values.copy().astype(np.float32)
+
+        # Replace NaN with nodata
+        data[np.isnan(data)] = nodata
+
+        # Determine shape
+        if data.ndim == 3:
+            nbands, ny, nx = data.shape
+        elif data.ndim == 2:
+            ny, nx = data.shape
+            nbands = 1
+            data = data[np.newaxis, :, :]
+        else:
+            raise ValueError(f"Unexpected data dimensions: {data.ndim}")
+
+        # Build affine transform from coordinates
+        x_coords = da.coords["x"].values
+        y_coords = da.coords["y"].values
+        x_res = abs(x_coords[1] - x_coords[0]) if len(x_coords) > 1 else 1e-4
+        y_res = abs(y_coords[0] - y_coords[1]) if len(y_coords) > 1 else 1e-4
+        minx = float(x_coords.min()) - x_res / 2
+        maxx = float(x_coords.max()) + x_res / 2
+        miny = float(y_coords.min()) - y_res / 2
+        maxy = float(y_coords.max()) + y_res / 2
+        transform = from_bounds(minx, miny, maxx, maxy, nx, ny)
+
+        if overview_levels is None:
+            overview_levels = [2, 4, 8, 16]
+
+        # Write COG
+        profile = {
+            "driver": "GTiff",
+            "dtype": "float32",
+            "width": nx,
+            "height": ny,
+            "count": nbands,
+            "crs": crs,
+            "transform": transform,
+            "nodata": nodata,
+            "tiled": True,
+            "blockxsize": 256,
+            "blockysize": 256,
+            "compress": compress,
+        }
+
+        with rasterio.open(output_path, "w", **profile) as dst:
+            for i in range(nbands):
+                dst.write(data[i], i + 1)
+
+            # Build overviews for COG
+            if overview_levels:
+                dst.build_overviews(overview_levels, rasterio.enums.Resampling.nearest)
+                dst.update_tags(ns="rio_overview", resampling="nearest")
+
+        logger.info("Exported COG: %s (%d bands, %dx%d)", output_path, nbands, nx, ny)
+        return output_path
+
     def get_snapshot_history(self) -> list[dict[str, Any]]:
         """Get Icechunk snapshot history for Time Travel."""
         return self.storage.get_snapshot_history()  # type: ignore[no-any-return]
