@@ -195,12 +195,14 @@ class TestGeoCoordinates:
         # Use a triangle so corners of the bbox crop fall outside the polygon
         geojson = {
             "type": "Polygon",
-            "coordinates": [[
-                [cx - dx, cy - dy],
-                [cx + dx, cy - dy],
-                [cx, cy + dy],
-                [cx - dx, cy - dy],
-            ]],
+            "coordinates": [
+                [
+                    [cx - dx, cy - dy],
+                    [cx + dx, cy - dy],
+                    [cx, cy + dy],
+                    [cx - dx, cy - dy],
+                ]
+            ],
         }
 
         clipped = pq.clip(ds, geojson)
@@ -295,12 +297,14 @@ class TestCrsTransformIntegration:
 
         geojson = {
             "type": "Polygon",
-            "coordinates": [[
-                [cx - dx, cy - dy],
-                [cx + dx, cy - dy],
-                [cx, cy + dy],
-                [cx - dx, cy - dy],
-            ]],
+            "coordinates": [
+                [
+                    [cx - dx, cy - dy],
+                    [cx + dx, cy - dy],
+                    [cx, cy + dy],
+                    [cx - dx, cy - dy],
+                ]
+            ],
         }
 
         clipped = pq.clip(ds, geojson, crs="EPSG:4326")

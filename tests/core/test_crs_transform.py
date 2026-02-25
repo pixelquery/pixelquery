@@ -94,7 +94,9 @@ class TestTransformGeometry:
         """Transform a GeoJSON dict polygon."""
         geojson = {
             "type": "Polygon",
-            "coordinates": [[[127.0, 37.5], [127.1, 37.5], [127.1, 37.6], [127.0, 37.6], [127.0, 37.5]]],
+            "coordinates": [
+                [[127.0, 37.5], [127.1, 37.5], [127.1, 37.6], [127.0, 37.6], [127.0, 37.5]]
+            ],
         }
         result = _transform_geometry(geojson, "EPSG:4326", "EPSG:32652")
         # Result should be a shapely geometry in UTM coords

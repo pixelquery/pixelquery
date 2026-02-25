@@ -163,7 +163,9 @@ class IcechunkVirtualReader:
                 elif mask_var.ndim == 2:
                     cloud_band = mask_var.values
                 else:
-                    cloud_band = mask_var.isel(band=0).values if "band" in mask_var.dims else mask_var.values
+                    cloud_band = (
+                        mask_var.isel(band=0).values if "band" in mask_var.dims else mask_var.values
+                    )
 
                 # Build clear mask
                 clear = np.isin(cloud_band, cm.clear_values)
@@ -173,7 +175,9 @@ class IcechunkVirtualReader:
                     clear_da = xr.DataArray(
                         clear,
                         dims=["y", "x"],
-                    ).interp_like(data.isel(band=0) if "band" in data.dims else data, method="nearest")
+                    ).interp_like(
+                        data.isel(band=0) if "band" in data.dims else data, method="nearest"
+                    )
                     return data.where(clear_da > 0.5)
 
                 clear_da = xr.DataArray(

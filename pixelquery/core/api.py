@@ -48,9 +48,7 @@ def _transform_bounds(
     return (min(x1, x2), min(y1, y2), max(x1, x2), max(y1, y2))
 
 
-def _transform_point(
-    x: float, y: float, src_crs: str, dst_crs: str
-) -> tuple[float, float]:
+def _transform_point(x: float, y: float, src_crs: str, dst_crs: str) -> tuple[float, float]:
     """Transform a single point between coordinate reference systems."""
     from pyproj import Transformer
 
@@ -141,7 +139,11 @@ def open_dataset(
             data={"xarray": xr_ds},
             metadata={"warehouse_path": warehouse_path, "storage_backend": "icechunk"},
         )
-    elif not is_remote and (Path(warehouse_path) / ".icechunk").exists() and storage_backend in ("auto", "icechunk"):
+    elif (
+        not is_remote
+        and (Path(warehouse_path) / ".icechunk").exists()
+        and storage_backend in ("auto", "icechunk")
+    ):
         logger.info("Detected Icechunk repository, use open_xarray() for best experience")
         # Route to open_xarray and wrap result
         xr_ds = open_xarray(warehouse_path, time_range=time_range, bands=bands, **kwargs)
@@ -544,7 +546,9 @@ def clip(ds_or_repo, geometry, crs="EPSG:4326", **kwargs):
 
 
 # Utility functions
-def compute_ndvi(red: DataArray | xr.DataArray, nir: DataArray | xr.DataArray) -> DataArray | xr.DataArray:
+def compute_ndvi(
+    red: DataArray | xr.DataArray, nir: DataArray | xr.DataArray
+) -> DataArray | xr.DataArray:
     """
     Compute NDVI (Normalized Difference Vegetation Index)
 

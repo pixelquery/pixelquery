@@ -41,9 +41,7 @@ class TestGdalFreeQueryPath:
         # Use a triangle so some pixels inside the bbox fall outside the polygon → NaN
         polygon = {
             "type": "Polygon",
-            "coordinates": [
-                [[127.05, 37.02], [127.09, 37.08], [127.01, 37.08], [127.05, 37.02]]
-            ],
+            "coordinates": [[[127.05, 37.02], [127.09, 37.08], [127.01, 37.08], [127.05, 37.02]]],
         }
         result = IcechunkVirtualReader.clip(ds, polygon)
         assert "data" in result

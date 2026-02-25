@@ -104,9 +104,7 @@ class PixelQueryS3:
             allow_http=allow_http,
             force_path_style=force_path_style,
         )
-        config.set_virtual_chunk_container(
-            icechunk.VirtualChunkContainer(self._prefix, vcc_store)
-        )
+        config.set_virtual_chunk_container(icechunk.VirtualChunkContainer(self._prefix, vcc_store))
 
         cred_kwargs: dict[str, Any] = {}
         if access_key_id and secret_access_key:
@@ -269,9 +267,7 @@ class PixelQueryS3:
                     acq_time = datetime.now(UTC)
                     date_str = acq_time.strftime("%Y%m%d")
 
-                vds = open_virtual_dataset(
-                    url, registry=self._registry, parser=VirtualTIFF(ifd=0)
-                )
+                vds = open_virtual_dataset(url, registry=self._registry, parser=VirtualTIFF(ifd=0))
                 gn = f"scene_{date_str.replace('-', '')}_{offset + len(group_names):04d}"
                 vds.virtualize.to_icechunk(store, group=gn)
 
@@ -326,9 +322,7 @@ class PixelQueryS3:
         idx.attrs["scenes"] = existing
         session.commit(f"Ingest {len(group_names)} COGs")
 
-        logger.info(
-            "Ingested %d COGs (%d skipped as duplicates)", len(group_names), skipped
-        )
+        logger.info("Ingested %d COGs (%d skipped as duplicates)", len(group_names), skipped)
         return group_names
 
     # ── Query ──
@@ -418,11 +412,14 @@ class PixelQueryS3:
     def clip(ds: xr.Dataset, geometry) -> xr.Dataset:
         """Clip to GeoJSON polygon. Pixels outside → NaN."""
         from shapely.geometry import shape
+
         geom = shape(geometry) if isinstance(geometry, dict) else geometry
         if not geom.is_valid:
             from shapely.validation import explain_validity
+
             raise ValidationError(f"Invalid geometry: {explain_validity(geom)}")
         from pixelquery.io.icechunk_reader import IcechunkVirtualReader
+
         return IcechunkVirtualReader.clip(ds, geometry)
 
     # ── Export ──
@@ -564,9 +561,7 @@ class PixelQueryS3:
             row: dict[str, Any] = {"date": s["acquisition_time"][:10]}
 
             if vals.ndim == 3:
-                band_names = s.get("band_names") or [
-                    f"band{i + 1}" for i in range(vals.shape[0])
-                ]
+                band_names = s.get("band_names") or [f"band{i + 1}" for i in range(vals.shape[0])]
                 for bi, bname in enumerate(band_names):
                     if bi < vals.shape[0]:
                         row[f"{bname}_mean"] = float(np.nanmean(vals[bi]))
@@ -654,8 +649,7 @@ class PixelQueryS3:
         nbands = vals.shape[0]
         if band_red >= nbands or band_nir >= nbands:
             raise ValidationError(
-                f"Band index out of range: red={band_red}, nir={band_nir}, "
-                f"data has {nbands} bands"
+                f"Band index out of range: red={band_red}, nir={band_nir}, data has {nbands} bands"
             )
         vals[vals == nodata] = np.nan
         red = vals[band_red]
@@ -743,6 +737,7 @@ class PixelQueryS3:
         geom = shape(geometry) if isinstance(geometry, dict) else geometry
         if not geom.is_valid:
             from shapely.validation import explain_validity
+
             raise ValidationError(f"Invalid geometry: {explain_validity(geom)}")
         bbox = geom.bounds
         ds = self.crop(ds, bbox)
@@ -873,16 +868,8 @@ class PixelQueryS3:
         scenes = self.list_scenes()
         items = [self.to_stac_item(s) for s in scenes]
 
-        all_times = [
-            s.get("acquisition_time")
-            for s in scenes
-            if s.get("acquisition_time")
-        ]
-        all_bounds = [
-            s.get("bounds")
-            for s in scenes
-            if s.get("bounds") and len(s["bounds"]) == 4
-        ]
+        all_times = [s.get("acquisition_time") for s in scenes if s.get("acquisition_time")]
+        all_bounds = [s.get("bounds") for s in scenes if s.get("bounds") and len(s["bounds"]) == 4]
 
         spatial_extent = (
             [
@@ -894,9 +881,7 @@ class PixelQueryS3:
             if all_bounds
             else None
         )
-        temporal_extent = (
-            [min(all_times), max(all_times)] if all_times else [None, None]
-        )
+        temporal_extent = [min(all_times), max(all_times)] if all_times else [None, None]
 
         return {
             "type": "Collection",

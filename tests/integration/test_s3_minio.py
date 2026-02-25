@@ -25,6 +25,7 @@ def _minio_available():
     """Check if MinIO is running on localhost:9000."""
     try:
         import urllib.request
+
         urllib.request.urlopen("http://localhost:9000/minio/health/live", timeout=2)
         return True
     except Exception:
@@ -116,6 +117,7 @@ class TestS3AutoDetect:
         s3_path = "s3://nonexistent-bucket/nonexistent-repo"
         with pytest.raises((ValueError, Exception)):
             import pixelquery as pq
+
             pq.open_dataset(s3_path, storage_type="s3", storage_config=S3_CONFIG)
 
     def test_s3_uri_detected_as_remote(self):

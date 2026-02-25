@@ -217,11 +217,13 @@ class IcechunkVirtualWriter:
 
         root = zarr.open_group(store, mode="a")
         mask_group = root[mask_group_name]
-        mask_group.attrs.update({
-            "source_file": str(mask_path),
-            "parent_group": parent_group_name,
-            "type": "cloud_mask",
-        })
+        mask_group.attrs.update(
+            {
+                "source_file": str(mask_path),
+                "parent_group": parent_group_name,
+                "type": "cloud_mask",
+            }
+        )
         if "0" in vds:
             mask_group.attrs["shape"] = list(vds["0"].shape)
 
