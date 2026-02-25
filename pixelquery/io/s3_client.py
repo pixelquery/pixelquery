@@ -34,6 +34,8 @@ from typing import Any
 import numpy as np
 import xarray as xr
 
+from pixelquery.core.exceptions import IngestionError, QueryError, ValidationError
+
 logger = logging.getLogger(__name__)
 
 
@@ -144,6 +146,9 @@ class PixelQueryS3:
         from pixelquery.io.icechunk_reader import IcechunkVirtualReader
 
         self._reader = IcechunkVirtualReader(self)
+        self.last_ingest_errors: list[dict[str, str]] = []
+        self._scene_cache: dict[str, xr.Dataset] = {}
+        self._cache_max: int = 64
 
     # ── StorageManager interface (for IcechunkVirtualReader) ──
 
@@ -166,11 +171,16 @@ class PixelQueryS3:
         import obstore
 
         paths = []
-        for chunk in obstore.list(self._s3_store, prefix=prefix):
-            for entry in chunk if isinstance(chunk, list) else [chunk]:
-                p = entry["path"] if isinstance(entry, dict) else entry.path
-                if p.endswith((".tif", ".tiff")):
-                    paths.append(f"{self._prefix}{p}")
+        try:
+            for chunk in obstore.list(self._s3_store, prefix=prefix):
+                for entry in chunk if isinstance(chunk, list) else [chunk]:
+                    p = entry["path"] if isinstance(entry, dict) else entry.path
+                    if p.endswith((".tif", ".tiff")):
+                        paths.append(f"{self._prefix}{p}")
+        except Exception as exc:
+            raise IngestionError(
+                f"S3 list failed (bucket={self.bucket}, prefix={prefix!r}): {exc}"
+            ) from exc
         return sorted(paths)
 
     def ingest_cogs(
@@ -179,6 +189,7 @@ class PixelQueryS3:
         *,
         cog_urls: list[str] | None = None,
         band_names: list[str] | None = None,
+        profile: str | None = None,
         product_id: str = "default",
         bounds: list[float] | None = None,
         crs: str = "EPSG:4326",
@@ -190,6 +201,8 @@ class PixelQueryS3:
             prefix: S3 prefix to scan for COGs (e.g. "arps/")
             cog_urls: Explicit list of S3 URLs. Overrides prefix scan.
             band_names: Band name list. Auto-detected if None.
+            profile: Product profile ID (e.g. "sentinel2_l2a", "dji_mavic3m").
+                     If set, auto-fills band_names and product_id from the profile.
             product_id: Product identifier
             bounds: [minx, miny, maxx, maxy]. None = unknown.
             crs: Coordinate reference system
@@ -198,6 +211,15 @@ class PixelQueryS3:
         Returns:
             List of ingested group names
         """
+        # Apply profile defaults
+        if profile is not None:
+            from pixelquery.products.base import get_profile
+
+            pp = get_profile(profile)
+            if band_names is None:
+                band_names = pp.band_names
+            if product_id == "default":
+                product_id = pp.product_id
         import zarr
         from virtual_tiff import VirtualTIFF
         from virtualizarr import open_virtual_dataset
@@ -228,6 +250,7 @@ class PixelQueryS3:
 
         group_names = []
         skipped = 0
+        failed = []
 
         for i, url in enumerate(urls):
             # Skip already-ingested COGs (dedup by source_file URL)
@@ -237,42 +260,49 @@ class PixelQueryS3:
                 continue
 
             fname = url.split("/")[-1]
-            date_match = re.search(filename_pattern, fname)
-            if date_match:
-                date_str = date_match.group(1)
-                acq_time = datetime.fromisoformat(date_str).replace(tzinfo=UTC)
-            else:
-                acq_time = datetime.now(UTC)
-                date_str = acq_time.strftime("%Y%m%d")
+            try:
+                date_match = re.search(filename_pattern, fname)
+                if date_match:
+                    date_str = date_match.group(1)
+                    acq_time = datetime.fromisoformat(date_str).replace(tzinfo=UTC)
+                else:
+                    acq_time = datetime.now(UTC)
+                    date_str = acq_time.strftime("%Y%m%d")
 
-            vds = open_virtual_dataset(
-                url, registry=self._registry, parser=VirtualTIFF(ifd=0)
-            )
-            gn = f"scene_{date_str.replace('-', '')}_{offset + len(group_names):04d}"
-            vds.virtualize.to_icechunk(store, group=gn)
+                vds = open_virtual_dataset(
+                    url, registry=self._registry, parser=VirtualTIFF(ifd=0)
+                )
+                gn = f"scene_{date_str.replace('-', '')}_{offset + len(group_names):04d}"
+                vds.virtualize.to_icechunk(store, group=gn)
 
-            root = zarr.open_group(store, mode="a")
-            shape = list(vds["0"].shape) if "0" in vds else []
+                root = zarr.open_group(store, mode="a")
+                shape = list(vds["0"].shape) if "0" in vds else []
 
-            # Auto-detect band names from shape
-            if band_names is None and shape:
-                n = shape[0] if len(shape) == 3 else 1
-                auto_bands = [f"band{j + 1}" for j in range(n)]
-            else:
-                auto_bands = band_names or []
+                # Auto-detect band names from shape
+                if band_names is None and shape:
+                    n = shape[0] if len(shape) == 3 else 1
+                    auto_bands = [f"band{j + 1}" for j in range(n)]
+                else:
+                    auto_bands = band_names or []
 
-            root[gn].attrs.update(
-                {
-                    "acquisition_time": acq_time.isoformat(),
-                    "product_id": product_id,
-                    "band_names": auto_bands,
-                    "source_file": url,
-                    "crs": crs,
-                    "bounds": bounds or [],
-                    "shape": shape,
-                }
-            )
-            group_names.append(gn)
+                root[gn].attrs.update(
+                    {
+                        "acquisition_time": acq_time.isoformat(),
+                        "product_id": product_id,
+                        "band_names": auto_bands,
+                        "source_file": url,
+                        "crs": crs,
+                        "bounds": bounds or [],
+                        "shape": shape,
+                    }
+                )
+                group_names.append(gn)
+            except Exception as exc:
+                logger.warning("Failed to ingest %s: %s", fname, exc)
+                failed.append({"url": url, "error": str(exc)})
+                continue
+
+        self.last_ingest_errors = failed
 
         if not group_names:
             if skipped:
@@ -351,7 +381,26 @@ class PixelQueryS3:
             xr.Dataset with dims (band, y, x) and geo-coordinates
         """
         group = scene["group"] if isinstance(scene, dict) else scene
-        return self._reader.open_scene(group, bands=bands)
+        cache_key = f"{group}:{','.join(bands or [])}"
+
+        if cache_key in self._scene_cache:
+            return self._scene_cache[cache_key]
+
+        try:
+            ds = self._reader.open_scene(group, bands=bands)
+        except Exception as exc:
+            raise QueryError(f"Failed to open scene '{group}': {exc}") from exc
+
+        if len(self._scene_cache) >= self._cache_max:
+            oldest = next(iter(self._scene_cache))
+            del self._scene_cache[oldest]
+
+        self._scene_cache[cache_key] = ds
+        return ds
+
+    def clear_cache(self) -> None:
+        """Clear the scene cache."""
+        self._scene_cache.clear()
 
     # ── Spatial operations ──
 
@@ -368,8 +417,12 @@ class PixelQueryS3:
     @staticmethod
     def clip(ds: xr.Dataset, geometry) -> xr.Dataset:
         """Clip to GeoJSON polygon. Pixels outside → NaN."""
+        from shapely.geometry import shape
+        geom = shape(geometry) if isinstance(geometry, dict) else geometry
+        if not geom.is_valid:
+            from shapely.validation import explain_validity
+            raise ValidationError(f"Invalid geometry: {explain_validity(geom)}")
         from pixelquery.io.icechunk_reader import IcechunkVirtualReader
-
         return IcechunkVirtualReader.clip(ds, geometry)
 
     # ── Export ──
@@ -598,6 +651,12 @@ class PixelQueryS3:
             2D float32 array with NDVI values (-1 to 1), NaN for invalid
         """
         vals = ds[data_var].values.astype(np.float32)
+        nbands = vals.shape[0]
+        if band_red >= nbands or band_nir >= nbands:
+            raise ValidationError(
+                f"Band index out of range: red={band_red}, nir={band_nir}, "
+                f"data has {nbands} bands"
+            )
         vals[vals == nodata] = np.nan
         red = vals[band_red]
         nir = vals[band_nir]
@@ -681,6 +740,9 @@ class PixelQueryS3:
             ds = self.open_scene(scene)
 
         geom = shape(geometry) if isinstance(geometry, dict) else geometry
+        if not geom.is_valid:
+            from shapely.validation import explain_validity
+            raise ValidationError(f"Invalid geometry: {explain_validity(geom)}")
         bbox = geom.bounds
         ds = self.crop(ds, bbox)
         ds = self.clip(ds, geometry)
@@ -756,3 +818,94 @@ class PixelQueryS3:
                 }
             )
         return results
+
+    @staticmethod
+    def to_stac_item(scene: dict) -> dict:
+        """Convert scene metadata dict to a STAC 1.0.0 Item dict.
+
+        Args:
+            scene: Scene metadata from list_scenes()
+
+        Returns:
+            STAC Item dict (no pystac dependency)
+        """
+        bounds = scene.get("bounds", [])
+        bbox = bounds if len(bounds) == 4 else None
+        geometry = None
+        if bbox:
+            minx, miny, maxx, maxy = bbox
+            geometry = {
+                "type": "Polygon",
+                "coordinates": [
+                    [[minx, miny], [maxx, miny], [maxx, maxy], [minx, maxy], [minx, miny]]
+                ],
+            }
+        return {
+            "type": "Feature",
+            "stac_version": "1.0.0",
+            "id": scene.get("group", ""),
+            "geometry": geometry,
+            "bbox": bbox,
+            "properties": {
+                "datetime": scene.get("acquisition_time"),
+                "product_id": scene.get("product_id"),
+                "eo:bands": [{"name": b} for b in scene.get("band_names", [])],
+            },
+            "links": [],
+            "assets": {
+                "data": {
+                    "href": scene.get("source_file", ""),
+                    "type": "image/tiff; application=geotiff",
+                }
+            },
+        }
+
+    def to_stac_collection(self, *, collection_id: str | None = None) -> dict:
+        """Export all scenes as a STAC 1.0.0 Collection dict.
+
+        Args:
+            collection_id: Collection identifier. Defaults to "pixelquery_{bucket}".
+
+        Returns:
+            STAC Collection dict with extent computed from all scenes
+        """
+        scenes = self.list_scenes()
+        items = [self.to_stac_item(s) for s in scenes]
+
+        all_times = [
+            s.get("acquisition_time")
+            for s in scenes
+            if s.get("acquisition_time")
+        ]
+        all_bounds = [
+            s.get("bounds")
+            for s in scenes
+            if s.get("bounds") and len(s["bounds"]) == 4
+        ]
+
+        spatial_extent = (
+            [
+                min(b[0] for b in all_bounds),
+                min(b[1] for b in all_bounds),
+                max(b[2] for b in all_bounds),
+                max(b[3] for b in all_bounds),
+            ]
+            if all_bounds
+            else None
+        )
+        temporal_extent = (
+            [min(all_times), max(all_times)] if all_times else [None, None]
+        )
+
+        return {
+            "type": "Collection",
+            "stac_version": "1.0.0",
+            "id": collection_id or f"pixelquery_{self.bucket}",
+            "description": f"PixelQuery collection from s3://{self.bucket}",
+            "extent": {
+                "spatial": {"bbox": [spatial_extent]},
+                "temporal": {"interval": [temporal_extent]},
+            },
+            "links": [],
+            "items": items,
+        }
