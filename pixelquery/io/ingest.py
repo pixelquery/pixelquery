@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 
 # Try to use Rust resampling (4-6x faster than scipy)
 try:
-    from pixelquery_core import (  # type: ignore[attr-defined]  # noqa: F401
+    from pixelquery_core import (  # type: ignore[attr-defined]
         resample_bilinear,
         resample_nearest_neighbor,
     )

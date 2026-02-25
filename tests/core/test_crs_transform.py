@@ -98,7 +98,7 @@ class TestTransformGeometry:
         }
         result = _transform_geometry(geojson, "EPSG:4326", "EPSG:32652")
         # Result should be a shapely geometry in UTM coords
-        bx, by, bxx, byy = result.bounds
+        bx, by, _, _ = result.bounds
         assert 300_000 < bx < 800_000
         assert 4_000_000 < by < 5_000_000
 
@@ -108,7 +108,7 @@ class TestTransformGeometry:
 
         geom = box(127.0, 37.5, 127.1, 37.6)
         result = _transform_geometry(geom, "EPSG:4326", "EPSG:32652")
-        bx, by, bxx, byy = result.bounds
+        bx, _, _, _ = result.bounds
         assert 300_000 < bx < 800_000
 
     def test_round_trip(self):

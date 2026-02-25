@@ -73,7 +73,7 @@ class TestGdalFreeQueryPath:
         monkeypatch.setitem(sys.modules, "rasterio.transform", None)
 
         # Ensure the bandmath accessor is registered
-        import pixelquery.core.bandmath  # noqa: F401
+        import pixelquery.core.bandmath
 
         ds = _make_geo_dataset()
         ndvi = ds.bandmath("(nir - red) / (nir + red)")
@@ -101,4 +101,4 @@ class TestGdalFreeQueryPath:
         monkeypatch.setitem(sys.modules, "rasterio.transform", None)
 
         # Should import without error
-        from pixelquery.core.timeseries import timeseries  # noqa: F401
+        from pixelquery.core.timeseries import timeseries

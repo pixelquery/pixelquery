@@ -260,13 +260,12 @@ class IcechunkVirtualReader:
                 data = data.sel(band=selected)
 
         # Apply cloud mask if requested
-        if cloud_mask:
-            if attrs.get("mask_group") or attrs.get("mask_source_file"):
-                data = self._apply_cloud_mask(
-                    data,
-                    attrs,
-                    snapshot_id=snapshot_id,
-                )
+        if cloud_mask and (attrs.get("mask_group") or attrs.get("mask_source_file")):
+            data = self._apply_cloud_mask(
+                data,
+                attrs,
+                snapshot_id=snapshot_id,
+            )
 
         # Build result dataset
         result = data.to_dataset(name="data")
@@ -407,8 +406,8 @@ class IcechunkVirtualReader:
         Returns:
             Clipped dataset (outside polygon = NaN)
         """
-        from shapely.geometry import shape
         from shapely import contains_xy, prepare
+        from shapely.geometry import shape
 
         geom = shape(geometry) if isinstance(geometry, dict) else geometry
 

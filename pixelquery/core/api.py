@@ -10,7 +10,7 @@ Supports two storage backends:
 
 import logging
 from datetime import datetime
-from typing import Any, Union
+from typing import Any
 
 import xarray as xr
 
@@ -544,7 +544,7 @@ def clip(ds_or_repo, geometry, crs="EPSG:4326", **kwargs):
 
 
 # Utility functions
-def compute_ndvi(red: Union[DataArray, xr.DataArray], nir: Union[DataArray, xr.DataArray]) -> Union[DataArray, xr.DataArray]:
+def compute_ndvi(red: DataArray | xr.DataArray, nir: DataArray | xr.DataArray) -> DataArray | xr.DataArray:
     """
     Compute NDVI (Normalized Difference Vegetation Index)
 
@@ -563,14 +563,14 @@ def compute_ndvi(red: Union[DataArray, xr.DataArray], nir: Union[DataArray, xr.D
 
 
 def compute_evi(
-    blue: Union[DataArray, xr.DataArray],
-    red: Union[DataArray, xr.DataArray],
-    nir: Union[DataArray, xr.DataArray],
+    blue: DataArray | xr.DataArray,
+    red: DataArray | xr.DataArray,
+    nir: DataArray | xr.DataArray,
     G: float = 2.5,
     C1: float = 6.0,
     C2: float = 7.5,
     L: float = 1.0,
-) -> Union[DataArray, xr.DataArray]:
+) -> DataArray | xr.DataArray:
     """
     Compute EVI (Enhanced Vegetation Index)
 

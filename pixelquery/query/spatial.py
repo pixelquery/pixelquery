@@ -15,7 +15,7 @@ from pixelquery.grid.tile_grid import FixedTileGrid
 
 # Try to import shapely for geometry operations
 try:
-    from shapely.geometry import MultiPolygon, Point, Polygon, box, shape  # noqa: F401
+    from shapely.geometry import MultiPolygon, Point, Polygon, box, shape
     from shapely.geometry.base import BaseGeometry
 
     SHAPELY_AVAILABLE = True

@@ -19,6 +19,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+
 # Check MinIO availability
 def _minio_available():
     """Check if MinIO is running on localhost:9000."""
@@ -54,7 +55,7 @@ def minio_bucket():
     try:
         import obstore.store
 
-        store = obstore.store.S3Store(
+        obstore.store.S3Store(
             bucket=S3_CONFIG["bucket"],
             config={
                 "endpoint": S3_CONFIG["endpoint_url"],
@@ -134,7 +135,7 @@ class TestS3StorageSingleton:
         # It may raise other errors (no bucket, etc.) but not Path errors
         s3_path = "s3://test-bucket/test-repo"
         try:
-            mgr = get_storage_manager(s3_path, storage_type="s3", storage_config=S3_CONFIG)
+            get_storage_manager(s3_path, storage_type="s3", storage_config=S3_CONFIG)
         except Exception as e:
             # Expected: connection errors, bucket errors, etc.
             # NOT expected: Path errors
