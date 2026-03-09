@@ -84,6 +84,7 @@ __all__ = [
     "open_dataset",
     "open_mfdataset",
     "open_xarray",
+    "point_timeseries",
     "register_product",
     "timeseries",
 ]
@@ -99,6 +100,10 @@ def __getattr__(name):
         from pixelquery.core.timeseries import timeseries
 
         return timeseries
+    elif name == "point_timeseries":
+        from pixelquery.core.api import point_timeseries
+
+        return point_timeseries
     elif name == "inspect_cog":
         from pixelquery.io.cog_metadata import inspect_cog
 

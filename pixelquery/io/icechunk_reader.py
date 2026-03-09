@@ -6,6 +6,7 @@ Supports time-range, spatial, and band filtering.
 Returns lazy xarray.Dataset objects backed by dask arrays.
 """
 
+import bisect
 import logging
 from datetime import UTC, datetime
 from typing import Any
@@ -30,6 +31,38 @@ class IcechunkVirtualReader:
             storage_manager: IcechunkStorageManager instance (initialized)
         """
         self.storage = storage_manager
+        # Optimization 1: instance-level cache for the raw scenes index
+        self._cached_scenes_index: list[dict[str, Any]] | None = None
+        # Optimization 2: pre-sorted scenes and times for binary search
+        self._sorted_scenes: list[dict[str, Any]] = []
+        self._sorted_times: list[datetime] = []
+
+    def _load_scenes_index(self) -> list[dict[str, Any]]:
+        """Read the raw scenes index from zarr storage, populating the cache."""
+        import zarr
+
+        session = self.storage.readonly_session(snapshot_id=None)
+        store = session.store
+        root = zarr.open_group(store, mode="r")
+
+        if "_scenes_index" not in root:
+            return []
+
+        raw: list[dict[str, Any]] = list(root["_scenes_index"].attrs.get("scenes", []))  # type: ignore[arg-type]
+
+        # Pre-sort by acquisition_time for O(log N) binary search in list_scenes
+        def _to_aware(acq: str) -> datetime:
+            t = datetime.fromisoformat(acq)
+            if t.tzinfo is None:
+                t = t.replace(tzinfo=UTC)
+            return t
+
+        sortable = [s for s in raw if s.get("acquisition_time")]
+        sortable.sort(key=lambda s: s["acquisition_time"])
+        self._sorted_scenes = sortable
+        self._sorted_times = [_to_aware(s["acquisition_time"]) for s in sortable]
+
+        return raw
 
     def list_scenes(
         self,
@@ -43,6 +76,8 @@ class IcechunkVirtualReader:
         List scenes matching filter criteria.
 
         Uses _scenes_index for fast lookup without opening each group.
+        The index is cached after the first read; time_range filtering uses
+        binary search (O(log N)) on the pre-sorted list.
 
         Args:
             time_range: (start, end) datetime range filter
@@ -57,16 +92,23 @@ class IcechunkVirtualReader:
             List of scene metadata dicts with keys:
             group, acquisition_time, product_id, bounds, crs, band_names
         """
-        import zarr
+        # Snapshot queries bypass the cache (different store state)
+        if snapshot_id is not None:
+            import zarr
 
-        session = self.storage.readonly_session(snapshot_id=snapshot_id)
-        store = session.store
-        root = zarr.open_group(store, mode="r")
+            session = self.storage.readonly_session(snapshot_id=snapshot_id)
+            store = session.store
+            root = zarr.open_group(store, mode="r")
 
-        if "_scenes_index" not in root:
-            return []
+            if "_scenes_index" not in root:
+                return []
 
-        scenes = list(root["_scenes_index"].attrs.get("scenes", []))  # type: ignore[arg-type]
+            scenes: list[dict[str, Any]] = list(root["_scenes_index"].attrs.get("scenes", []))  # type: ignore[arg-type]
+        else:
+            # Optimization 1: populate cache on first call only
+            if self._cached_scenes_index is None:
+                self._cached_scenes_index = self._load_scenes_index()
+            scenes = list(self._cached_scenes_index)  # shallow copy to avoid mutation
 
         # Filter by time range
         if time_range:
@@ -77,16 +119,23 @@ class IcechunkVirtualReader:
             if end.tzinfo is None:
                 end = end.replace(tzinfo=UTC)
 
-            filtered = []
-            for s in scenes:
-                acq = s.get("acquisition_time")  # type: ignore[union-attr]
-                if acq:
-                    t = datetime.fromisoformat(acq)  # type: ignore[arg-type]
-                    if t.tzinfo is None:
-                        t = t.replace(tzinfo=UTC)
-                    if start <= t <= end:
-                        filtered.append(s)
-            scenes = filtered
+            if snapshot_id is None and self._sorted_times:
+                # Optimization 2: O(log N) binary search on pre-sorted list
+                left = bisect.bisect_left(self._sorted_times, start)
+                right = bisect.bisect_right(self._sorted_times, end)
+                scenes = self._sorted_scenes[left:right]
+            else:
+                # Fallback linear scan (snapshot queries or empty sorted list)
+                filtered = []
+                for s in scenes:
+                    acq = s.get("acquisition_time")  # type: ignore[union-attr]
+                    if acq:
+                        t = datetime.fromisoformat(acq)  # type: ignore[arg-type]
+                        if t.tzinfo is None:
+                            t = t.replace(tzinfo=UTC)
+                        if start <= t <= end:
+                            filtered.append(s)
+                scenes = filtered
 
         # Filter by spatial bounds (intersection test)
         if bounds:
@@ -294,6 +343,7 @@ class IcechunkVirtualReader:
         snapshot_id: str | None = None,
         cloud_mask: bool = False,
         bounds_crs: str | None = None,
+        latest_only: bool = False,
     ) -> xr.Dataset:
         """
         Open filtered scenes as a concatenated xarray.Dataset.
@@ -311,10 +361,12 @@ class IcechunkVirtualReader:
             bounds_crs: CRS of the *bounds* parameter. When provided,
                         bounds are transformed to the dataset CRS for
                         both scene filtering and pixel crop.
+            latest_only: If True, open only the most recent scene.
+                         Skips concat overhead — O(1) instead of O(N).
 
         Returns:
             xr.Dataset with dims (time, band, y, x) if multiple scenes,
-            or (band, y, x) if single scene
+            or (band, y, x) if single scene / latest_only
 
         Raises:
             ValueError: If no scenes match the query filters
@@ -332,6 +384,10 @@ class IcechunkVirtualReader:
 
         # Sort by acquisition time
         scenes.sort(key=lambda s: s.get("acquisition_time", ""))
+
+        # Optimization: only open the latest scene (skip O(N) concat)
+        if latest_only:
+            scenes = [scenes[-1]]
 
         # Open each scene
         datasets = []
@@ -531,6 +587,100 @@ class IcechunkVirtualReader:
 
         logger.info("Exported COG: %s (%d bands, %dx%d)", output_path, nbands, nx, ny)
         return output_path
+
+    def point_timeseries(
+        self,
+        lon: float,
+        lat: float,
+        time_range=None,
+        bands: list[str] | None = None,
+        product_id: str | None = None,
+        snapshot_id: str | None = None,
+        bounds_crs: str | None = None,
+    ) -> dict:
+        """Extract pixel values at (lon, lat) across all time steps using direct zarr reads.
+
+        Instead of opening full raster datasets for each scene, this method:
+        1. Computes pixel coordinates from scene bounds metadata
+        2. Reads only the single pixel (band, 1, 1) from each scene's zarr array
+
+        Returns:
+            dict with keys:
+            - "timestamps": list of ISO date strings
+            - "values": dict mapping band_name -> list of float values
+        """
+        import zarr
+
+        scenes = self.list_scenes(
+            time_range=time_range,
+            product_id=product_id,
+            snapshot_id=snapshot_id,
+            bounds_crs=bounds_crs,
+        )
+
+        if not scenes:
+            raise ValueError("No scenes match the query filters")
+
+        scenes.sort(key=lambda s: s.get("acquisition_time", ""))
+
+        session = self.storage.readonly_session(snapshot_id=snapshot_id)
+        store = session.store
+        root = zarr.open_group(store, mode="r")
+
+        timestamps = []
+        # band_values: {band_name: [val_t0, val_t1, ...]}
+        band_values: dict[str, list[float]] = {}
+
+        for scene_meta in scenes:
+            group_name = scene_meta["group"]
+            scene_bounds = scene_meta.get("bounds")
+            scene_band_names = scene_meta.get("band_names", [])
+            acq_time = scene_meta.get("acquisition_time", "")
+
+            if not scene_bounds:
+                continue
+
+            try:
+                grp = root[group_name]
+                if "0" not in grp:
+                    continue
+                arr = grp["0"]  # zarr array: (band, y, x)
+
+                n_bands, ny, nx = arr.shape
+                minx, miny, maxx, maxy = scene_bounds
+
+                # Compute pixel indices from bounds (same logic as open_scene coord assignment)
+                x_res = (maxx - minx) / nx
+                y_res = (maxy - miny) / ny
+
+                # x coords go left to right: minx + x_res/2 ... maxx - x_res/2
+                x_idx = int(round((lon - (minx + x_res / 2)) / x_res))
+                x_idx = max(0, min(nx - 1, x_idx))
+
+                # y coords go top to bottom: maxy - y_res/2 ... miny + y_res/2
+                y_idx = int(round(((maxy - y_res / 2) - lat) / y_res))
+                y_idx = max(0, min(ny - 1, y_idx))
+
+                # Direct zarr read — only 1 pixel across all bands
+                pixel = arr[:, y_idx, x_idx]  # shape: (n_bands,)
+
+                timestamps.append(acq_time[:10] if acq_time else "")
+
+                # Map band values
+                for b_idx, band_name in enumerate(scene_band_names):
+                    if bands and band_name not in bands:
+                        continue
+                    if band_name not in band_values:
+                        band_values[band_name] = []
+                    band_values[band_name].append(float(pixel[b_idx]))
+
+            except Exception as e:
+                logger.warning("Failed to read pixel from scene %s: %s", group_name, e)
+
+        if not timestamps:
+            raise ValueError("No pixel data could be extracted")
+
+        return {"timestamps": timestamps, "values": band_values}
 
     def get_snapshot_history(self) -> list[dict[str, Any]]:
         """Get Icechunk snapshot history for Time Travel."""

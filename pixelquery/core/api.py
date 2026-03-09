@@ -252,6 +252,7 @@ def open_xarray(
     snapshot_id: str | None = None,
     cloud_mask: bool = False,
     bounds_crs: str | None = None,
+    latest_only: bool = False,
     **kwargs,
 ):
     """
@@ -329,6 +330,7 @@ def open_xarray(
         snapshot_id=snapshot_id,
         cloud_mask=cloud_mask,
         bounds_crs=bounds_crs,
+        latest_only=latest_only,
     )
 
     # Apply pixel-level bbox crop if bounds provided and geo-coordinates exist
@@ -341,6 +343,70 @@ def open_xarray(
         result = result.sel(x=slice(minx, maxx), y=slice(maxy, miny))
 
     return result
+
+
+def point_timeseries(
+    repo_path: str,
+    lon: float,
+    lat: float,
+    bands: list[str] | None = None,
+    time_range: tuple[datetime, datetime] | None = None,
+    product_id: str | None = None,
+    snapshot_id: str | None = None,
+    bounds_crs: str | None = None,
+    **kwargs,
+) -> dict:
+    """Fast point timeseries using direct zarr pixel reads.
+
+    Instead of opening full raster datasets for each scene, reads only
+    the single pixel at (lon, lat) from each scene's zarr array.
+
+    Args:
+        repo_path: Path to the Icechunk repository root directory
+        lon: Longitude of the query point
+        lat: Latitude of the query point
+        bands: Optional band name filter (e.g., ["red", "nir"])
+        time_range: (start, end) datetime range filter
+        product_id: Product identifier filter
+        snapshot_id: Icechunk snapshot ID for Time Travel queries
+        bounds_crs: CRS of the query point coordinates (e.g. "EPSG:4326")
+        **kwargs: Passed to IcechunkStorageManager (vcc_prefix, vcc_data_path, etc.)
+
+    Returns:
+        dict with keys:
+        - "timestamps": list of ISO date strings (YYYY-MM-DD)
+        - "values": dict mapping band_name -> list of float values
+
+    Raises:
+        ValueError: If no scenes match the query filters
+        ImportError: If icechunk dependencies are not installed
+    """
+    try:
+        from pixelquery._internal.storage.icechunk_storage import IcechunkStorageManager
+        from pixelquery.io.icechunk_reader import IcechunkVirtualReader
+    except ImportError as e:
+        raise ImportError(
+            "Icechunk dependencies not installed. Install with: pip install pixelquery[icechunk]"
+        ) from e
+
+    sm_kwargs = {}
+    for key in ("vcc_prefix", "vcc_data_path", "storage_type", "storage_config"):
+        if key in kwargs:
+            sm_kwargs[key] = kwargs.pop(key)
+
+    storage = IcechunkStorageManager(repo_path, **sm_kwargs)
+    storage.initialize()
+
+    reader = IcechunkVirtualReader(storage)
+    return reader.point_timeseries(
+        lon=lon,
+        lat=lat,
+        time_range=time_range,
+        bands=bands,
+        product_id=product_id,
+        snapshot_id=snapshot_id,
+        bounds_crs=bounds_crs,
+    )
 
 
 def open_mfdataset(
