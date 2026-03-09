@@ -477,11 +477,13 @@ def list_tiles(
     if hasattr(catalog, "list_tiles"):
         if as_of_snapshot_id and hasattr(catalog, "get_snapshot_history"):
             # IcebergCatalog with Time Travel
-            return list(catalog.list_tiles(
-                bounds=bounds,
-                time_range=time_range,
-                as_of_snapshot_id=as_of_snapshot_id,
-            ))
+            return list(
+                catalog.list_tiles(
+                    bounds=bounds,
+                    time_range=time_range,
+                    as_of_snapshot_id=as_of_snapshot_id,
+                )
+            )
         else:
             return list(catalog.list_tiles(bounds=bounds, time_range=time_range))
 
