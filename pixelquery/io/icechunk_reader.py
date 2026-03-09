@@ -128,9 +128,9 @@ class IcechunkVirtualReader:
                 # Fallback linear scan (snapshot queries or empty sorted list)
                 filtered = []
                 for s in scenes:
-                    acq = s.get("acquisition_time")  # type: ignore[union-attr]
+                    acq = s.get("acquisition_time")
                     if acq:
-                        t = datetime.fromisoformat(acq)  # type: ignore[arg-type]
+                        t = datetime.fromisoformat(acq)
                         if t.tzinfo is None:
                             t = t.replace(tzinfo=UTC)
                         if start <= t <= end:
@@ -144,25 +144,25 @@ class IcechunkVirtualReader:
             minx, miny, maxx, maxy = bounds
             filtered = []
             for s in scenes:
-                sb = s.get("bounds")  # type: ignore[union-attr]
+                sb = s.get("bounds")
                 if sb is None:
                     # No bounds info -> include by default
                     filtered.append(s)
                     continue
                 # Transform query bounds to scene CRS if needed
                 qb: tuple[float, float, float, float] = (minx, miny, maxx, maxy)
-                scene_crs = s.get("crs")  # type: ignore[union-attr]
-                if bounds_crs and scene_crs and _needs_crs_transform(bounds_crs, scene_crs):  # type: ignore[arg-type]
-                    qb = _transform_bounds(qb, bounds_crs, scene_crs)  # type: ignore[arg-type]
-                if not (sb[2] < qb[0] or sb[0] > qb[2] or sb[3] < qb[1] or sb[1] > qb[3]):  # type: ignore[index, operator]
+                scene_crs = s.get("crs")
+                if bounds_crs and scene_crs and _needs_crs_transform(bounds_crs, scene_crs):
+                    qb = _transform_bounds(qb, bounds_crs, scene_crs)  # type: ignore[assignment]
+                if not (sb[2] < qb[0] or sb[0] > qb[2] or sb[3] < qb[1] or sb[1] > qb[3]):
                     filtered.append(s)
             scenes = filtered
 
         # Filter by product_id
         if product_id:
-            scenes = [s for s in scenes if s.get("product_id") == product_id]  # type: ignore[union-attr]
+            scenes = [s for s in scenes if s.get("product_id") == product_id]
 
-        return scenes  # type: ignore[return-value]
+        return scenes
 
     def _apply_cloud_mask(
         self,
@@ -641,12 +641,16 @@ class IcechunkVirtualReader:
                 continue
 
             try:
-                grp = root[group_name]
-                if "0" not in grp:
-                    continue
-                arr = grp["0"]  # zarr array: (band, y, x)
+                import zarr as _zarr
 
-                _n_bands, ny, nx = arr.shape
+                grp = root[group_name]
+                if not isinstance(grp, _zarr.Group) or "0" not in grp:
+                    continue
+                zarr_arr = grp["0"]
+                if not isinstance(zarr_arr, _zarr.Array):
+                    continue
+
+                _n_bands, ny, nx = zarr_arr.shape
                 minx, miny, maxx, maxy = scene_bounds
 
                 # Compute pixel indices from bounds (same logic as open_scene coord assignment)
@@ -662,7 +666,7 @@ class IcechunkVirtualReader:
                 y_idx = max(0, min(ny - 1, y_idx))
 
                 # Direct zarr read — only 1 pixel across all bands
-                pixel = arr[:, y_idx, x_idx]  # shape: (n_bands,)
+                pixel: np.ndarray = np.asarray(zarr_arr[:, y_idx, x_idx])
 
                 timestamps.append(acq_time[:10] if acq_time else "")
 
