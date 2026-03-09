@@ -153,7 +153,7 @@ class IcechunkVirtualReader:
                 qb: tuple[float, float, float, float] = (minx, miny, maxx, maxy)
                 scene_crs = s.get("crs")
                 if bounds_crs and scene_crs and _needs_crs_transform(bounds_crs, scene_crs):
-                    qb = _transform_bounds(qb, bounds_crs, scene_crs)  # type: ignore[assignment]
+                    qb = _transform_bounds(qb, bounds_crs, scene_crs)
                 if not (sb[2] < qb[0] or sb[0] > qb[2] or sb[3] < qb[1] or sb[1] > qb[3]):
                     filtered.append(s)
             scenes = filtered
