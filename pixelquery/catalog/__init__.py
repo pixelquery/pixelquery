@@ -11,17 +11,20 @@ Supports three backends:
 Use LocalCatalog.create() for automatic backend selection.
 """
 
-from pixelquery.catalog.local import LocalCatalog
-
 __all__ = [
     "IcebergCatalog",
+    "IcechunkCatalog",
     "LocalCatalog",
 ]
 
 
-# Lazy imports for optional backends (pyiceberg/icechunk deps may not be installed)
+# Lazy imports — avoids top-level geopandas/pyiceberg/icechunk deps
 def __getattr__(name):
-    if name == "IcebergCatalog":
+    if name == "LocalCatalog":
+        from pixelquery.catalog.local import LocalCatalog
+
+        return LocalCatalog
+    elif name == "IcebergCatalog":
         from pixelquery.catalog.iceberg import IcebergCatalog
 
         return IcebergCatalog
