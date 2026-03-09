@@ -646,7 +646,7 @@ class IcechunkVirtualReader:
                     continue
                 arr = grp["0"]  # zarr array: (band, y, x)
 
-                n_bands, ny, nx = arr.shape
+                _n_bands, ny, nx = arr.shape
                 minx, miny, maxx, maxy = scene_bounds
 
                 # Compute pixel indices from bounds (same logic as open_scene coord assignment)
@@ -654,11 +654,11 @@ class IcechunkVirtualReader:
                 y_res = (maxy - miny) / ny
 
                 # x coords go left to right: minx + x_res/2 ... maxx - x_res/2
-                x_idx = int(round((lon - (minx + x_res / 2)) / x_res))
+                x_idx = round((lon - (minx + x_res / 2)) / x_res)
                 x_idx = max(0, min(nx - 1, x_idx))
 
                 # y coords go top to bottom: maxy - y_res/2 ... miny + y_res/2
-                y_idx = int(round(((maxy - y_res / 2) - lat) / y_res))
+                y_idx = round(((maxy - y_res / 2) - lat) / y_res)
                 y_idx = max(0, min(ny - 1, y_idx))
 
                 # Direct zarr read — only 1 pixel across all bands
