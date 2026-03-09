@@ -209,7 +209,7 @@ def open_dataset(
                 start, end = time_range
                 start_ym = start.strftime("%Y-%m")
                 end_ym = end.strftime("%Y-%m")
-                metadata_list = [m for m in metadata_list if start_ym <= m.year_month <= end_ym]  # type: ignore[assignment]
+                metadata_list = [m for m in metadata_list if start_ym <= m.year_month <= end_ym]
 
             # Read and merge chunks
             times_list = []
@@ -477,13 +477,13 @@ def list_tiles(
     if hasattr(catalog, "list_tiles"):
         if as_of_snapshot_id and hasattr(catalog, "get_snapshot_history"):
             # IcebergCatalog with Time Travel
-            return catalog.list_tiles(  # type: ignore[call-arg]
+            return list(catalog.list_tiles(
                 bounds=bounds,
                 time_range=time_range,
                 as_of_snapshot_id=as_of_snapshot_id,
-            )
+            ))
         else:
-            return catalog.list_tiles(bounds=bounds, time_range=time_range)
+            return list(catalog.list_tiles(bounds=bounds, time_range=time_range))
 
     return []
 
@@ -523,7 +523,7 @@ def get_snapshot_history(
     catalog = LocalCatalog.create(warehouse_path, backend=storage_backend)
 
     if hasattr(catalog, "get_snapshot_history"):
-        return catalog.get_snapshot_history()
+        return list(catalog.get_snapshot_history())
     else:
         logger.warning("Snapshot history only available for Iceberg backend")
         return []
@@ -554,7 +554,8 @@ def get_current_snapshot_id(
     catalog = LocalCatalog.create(warehouse_path, backend=storage_backend)
 
     if hasattr(catalog, "get_current_snapshot_id"):
-        return catalog.get_current_snapshot_id()
+        result = catalog.get_current_snapshot_id()
+        return int(result) if result is not None else None
     else:
         return None
 
