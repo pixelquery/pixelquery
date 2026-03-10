@@ -354,6 +354,7 @@ def point_timeseries(
     product_id: str | None = None,
     snapshot_id: str | None = None,
     bounds_crs: str | None = None,
+    cloud_mask: bool = False,
     **kwargs,
 ) -> dict:
     """Fast point timeseries using direct zarr pixel reads.
@@ -406,6 +407,7 @@ def point_timeseries(
         product_id=product_id,
         snapshot_id=snapshot_id,
         bounds_crs=bounds_crs,
+        cloud_mask=cloud_mask,
     )
 
 
