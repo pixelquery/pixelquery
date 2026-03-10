@@ -129,6 +129,18 @@ class ProductProfile:
 
 # Built-in profiles for common satellite products
 BUILTIN_PROFILES = {
+    "arps/arps_sr": ProductProfile(
+        product_id="arps/arps_sr",
+        bands={"blue": 0, "green": 1, "red": 2, "nir": 3},
+        resolution=3.0,
+        provider="ARPS",
+        description="ARPS Surface Reflectance (4-band)",
+        cloud_mask=CloudMask(
+            band_index=0,  # cloudmask band
+            clear_values=[1],  # 1 = clear
+            file_suffix="_qa",
+        ),
+    ),
     "planet_sr": ProductProfile(
         product_id="planet_sr",
         bands={"blue": 0, "green": 1, "red": 2, "nir": 3},
