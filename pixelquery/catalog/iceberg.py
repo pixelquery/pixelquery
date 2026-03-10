@@ -246,11 +246,11 @@ class IcebergCatalog:
         self.storage.table.refresh()
 
         # Build filters
-        filters = [EqualTo("tile_id", tile_id)]
+        filters = [EqualTo("tile_id", tile_id)]  # type: ignore
         if year_month:
-            filters.append(EqualTo("year_month", year_month))
+            filters.append(EqualTo("year_month", year_month))  # type: ignore
         if band:
-            filters.append(EqualTo("band", band))
+            filters.append(EqualTo("band", band))  # type: ignore
 
         row_filter = And(*filters) if len(filters) > 1 else filters[0]
 

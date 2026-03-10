@@ -675,6 +675,7 @@ class IcechunkVirtualReader:
                     mask_group_name = scene_meta.get("mask_group")
                     if scene_product_id and mask_group_name and mask_group_name in root:
                         from pixelquery.catalog.product_profile import BUILTIN_PROFILES
+
                         profile = BUILTIN_PROFILES.get(scene_product_id)
                         if profile is not None and profile.cloud_mask is not None:
                             cm = profile.cloud_mask
@@ -682,7 +683,9 @@ class IcechunkVirtualReader:
                             if isinstance(mask_grp, _zarr.Group) and "0" in mask_grp:
                                 mask_arr = mask_grp["0"]
                                 if isinstance(mask_arr, _zarr.Array):
-                                    mask_pixel = int(np.asarray(mask_arr[cm.band_index, y_idx, x_idx]))
+                                    mask_pixel = int(
+                                        np.asarray(mask_arr[cm.band_index, y_idx, x_idx])
+                                    )
                                     if mask_pixel not in cm.clear_values:
                                         continue  # skip cloudy scene
 

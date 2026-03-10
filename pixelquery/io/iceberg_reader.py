@@ -106,11 +106,11 @@ class IcebergPixelReader:
         self.storage.table.refresh()
 
         # Build filter expression
-        filters = [EqualTo("tile_id", tile_id)]
+        filters = [EqualTo("tile_id", tile_id)]  # type: ignore
 
         if bands and len(bands) == 1:
             # Single band filter uses partition pruning
-            filters.append(EqualTo("band", bands[0]))
+            filters.append(EqualTo("band", bands[0]))  # type: ignore
 
         if time_range:
             start, end = time_range
@@ -125,8 +125,8 @@ class IcebergPixelReader:
             end_month = end.strftime("%Y-%m")
             filters.extend(
                 [
-                    GreaterThanOrEqual("year_month", start_month),  # type: ignore[list-item]
-                    LessThanOrEqual("year_month", end_month),  # type: ignore[list-item]
+                    GreaterThanOrEqual("year_month", start_month),  # type: ignore
+                    LessThanOrEqual("year_month", end_month),  # type: ignore
                 ]
             )
 
@@ -312,8 +312,8 @@ class IcebergPixelReader:
             start, end = time_range
             filters.extend(
                 [
-                    GreaterThanOrEqual("year_month", start.strftime("%Y-%m")),  # type: ignore[list-item]
-                    LessThanOrEqual("year_month", end.strftime("%Y-%m")),  # type: ignore[list-item]
+                    GreaterThanOrEqual("year_month", start.strftime("%Y-%m")),  # type: ignore
+                    LessThanOrEqual("year_month", end.strftime("%Y-%m")),  # type: ignore
                 ]
             )
 
@@ -377,7 +377,7 @@ class IcebergPixelReader:
 
         filters = []
         if tile_id:
-            filters.append(EqualTo("tile_id", tile_id))
+            filters.append(EqualTo("tile_id", tile_id))  # type: ignore
 
         # Build row filter
         if len(filters) == 1:
@@ -439,9 +439,9 @@ class IcebergPixelReader:
 
         filters = []
         if tile_id:
-            filters.append(EqualTo("tile_id", tile_id))
+            filters.append(EqualTo("tile_id", tile_id))  # type: ignore
         if band:
-            filters.append(EqualTo("band", band))
+            filters.append(EqualTo("band", band))  # type: ignore
 
         # Build row filter
         if len(filters) == 1:
@@ -508,15 +508,15 @@ class IcebergPixelReader:
 
         filters = []
         if tile_id:
-            filters.append(EqualTo("tile_id", tile_id))
+            filters.append(EqualTo("tile_id", tile_id))  # type: ignore
         if band:
-            filters.append(EqualTo("band", band))
+            filters.append(EqualTo("band", band))  # type: ignore
         if time_range:
             start, end = time_range
             filters.extend(
                 [
-                    GreaterThanOrEqual("year_month", start.strftime("%Y-%m")),  # type: ignore[list-item]
-                    LessThanOrEqual("year_month", end.strftime("%Y-%m")),  # type: ignore[list-item]
+                    GreaterThanOrEqual("year_month", start.strftime("%Y-%m")),  # type: ignore
+                    LessThanOrEqual("year_month", end.strftime("%Y-%m")),  # type: ignore
                 ]
             )
 
