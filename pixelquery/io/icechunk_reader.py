@@ -182,10 +182,10 @@ class IcechunkVirtualReader:
             attrs: Scene group attributes (contains mask_group or mask_source_file)
             snapshot_id: Icechunk snapshot for Time Travel
         """
-        from pixelquery.catalog.product_profile import BUILTIN_PROFILES
+        from pixelquery.catalog.product_profile import get_registry
 
         product_id = attrs.get("product_id")
-        profile = BUILTIN_PROFILES.get(product_id) if product_id else None
+        profile = get_registry().get(product_id) if product_id else None
         if profile is None or profile.cloud_mask is None:
             logger.warning("No CloudMask config for product '%s', skipping", product_id)
             return data
@@ -674,9 +674,9 @@ class IcechunkVirtualReader:
                     scene_product_id = scene_meta.get("product_id")
                     mask_group_name = scene_meta.get("mask_group")
                     if scene_product_id and mask_group_name and mask_group_name in root:
-                        from pixelquery.catalog.product_profile import BUILTIN_PROFILES
+                        from pixelquery.catalog.product_profile import get_registry
 
-                        profile = BUILTIN_PROFILES.get(scene_product_id)
+                        profile = get_registry().get(scene_product_id)
                         if profile is not None and profile.cloud_mask is not None:
                             cm = profile.cloud_mask
                             mask_grp = root[mask_group_name]
