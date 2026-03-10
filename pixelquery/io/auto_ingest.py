@@ -273,8 +273,11 @@ def ingest(
             "band_names": band_names,
         }
 
-        # Match mask file by date (local files only)
-        if not is_remote and mask_dir and mask_dir.is_dir():
+        # Match mask file
+        if is_remote and mask_path:
+            # Remote: mask_path is a direct S3 URI to the mask file
+            info["mask_path"] = mask_path
+        elif not is_remote and mask_dir and mask_dir.is_dir():
             matched = _match_mask_file(Path(cog_file), mask_dir, date_pattern)
             if matched:
                 info["mask_path"] = str(matched.resolve())
