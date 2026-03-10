@@ -1,6 +1,6 @@
 [project]
 name = "pixelquery"
-version = "0.1.17"
+version = "0.1.18"
 description = "Turn your COG files into an analysis-ready time-series data cube"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -191,6 +191,7 @@ ignore_missing_imports = true
 module = [
     "pixelquery._internal.storage.iceberg_storage",
     "pixelquery.io.iceberg_reader",
+    "pixelquery.catalog.iceberg",
 ]
 warn_unused_ignores = false
 
