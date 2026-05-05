@@ -1,0 +1,62 @@
+name: Feature request
+description: Suggest a new feature or improvement
+title: "[Feature]: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for proposing an idea. Before filing, please check that there
+        is not already an open issue or discussion covering the same topic.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: |
+        Describe the use case, not the solution. What are you trying to do?
+        What is blocking you with the current API?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: |
+        Optional. If you have an idea of what the API or behavior should look
+        like, describe it here. Code snippets are welcome.
+      render: python
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches you have tried or considered, and why they did not work.
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      description: How large do you think this change is?
+      options:
+        - Small (a few lines or a localized addition)
+        - Medium (a new function or method)
+        - Large (a new module, backend, or API surface)
+        - Not sure
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Are you willing to contribute?
+      options:
+        - label: I would be willing to open a pull request for this.
+        - label: I would need help from a maintainer.
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Links to related issues, papers, similar features in other libraries, etc.

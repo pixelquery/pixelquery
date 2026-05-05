@@ -1,0 +1,9 @@
+# PixelQuery code owners
+#
+# This file tells GitHub which people should be requested for review when a
+# pull request modifies a given path. The last matching pattern wins.
+#
+# Syntax: https://docs.github.com/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owner for everything in the repository.
+*       @thsghdud13
