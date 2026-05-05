@@ -61,7 +61,12 @@ except ImportError:
 # Register xarray BandMath accessor (ds.bandmath.ndvi(), etc.)
 import pixelquery.core.bandmath
 
-__version__ = "0.1.0"
+from importlib.metadata import PackageNotFoundError, version as _version
+
+try:
+    __version__ = _version("pixelquery")
+except PackageNotFoundError:
+    __version__ = "0.0.0+unknown"
 
 __all__ = [
     "DataArray",

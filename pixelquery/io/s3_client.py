@@ -87,11 +87,6 @@ class PixelQueryS3:
         if allow_http:
             os.environ.setdefault("AWS_ALLOW_HTTP", "true")
 
-        # Apply codecs patch
-        from pixelquery._internal.codecs import patch_imagecodecs
-
-        patch_imagecodecs()
-
         # Setup Icechunk
         import icechunk
 
