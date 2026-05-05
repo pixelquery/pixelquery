@@ -1,0 +1,107 @@
+name: Bug report
+description: Report a defect in PixelQuery
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report. Please fill out the
+        sections below so we can reproduce and fix the issue quickly.
+
+  - type: checkboxes
+    id: prereqs
+    attributes:
+      label: Before you submit
+      options:
+        - label: I have searched existing issues and this is not a duplicate.
+          required: true
+        - label: I am using the latest released version, or I have explained why I cannot.
+          required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear and concise description of the bug.
+      placeholder: When I call `pq.ingest_cogs(...)`, ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproducible example
+      description: |
+        A small, self-contained snippet that reproduces the issue. Strip out
+        anything not directly related. If the bug requires a specific COG file,
+        describe its shape (bands, dtype, dimensions) rather than attaching
+        large binaries.
+      render: python
+    validations:
+      required: true
+
+  - type: textarea
+    id: traceback
+    attributes:
+      label: Full traceback (if applicable)
+      description: Paste the complete error and traceback.
+      render: shell
+
+  - type: input
+    id: pixelquery-version
+    attributes:
+      label: PixelQuery version
+      placeholder: "0.1.22"
+    validations:
+      required: true
+
+  - type: input
+    id: python-version
+    attributes:
+      label: Python version
+      placeholder: "3.12.3"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Linux
+        - macOS
+        - Windows (untested by maintainers)
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: install-method
+    attributes:
+      label: How did you install PixelQuery?
+      placeholder: "pip install pixelquery[icechunk]"
+    validations:
+      required: true
+
+  - type: textarea
+    id: extras
+    attributes:
+      label: Relevant dependency versions
+      description: |
+        Output of `pip list | grep -E 'icechunk|virtualizarr|virtual-tiff|zarr|xarray|obstore|rasterio|numpy'`,
+        or anything else that might be relevant.
+      render: shell
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Anything else that might help — screenshots, logs, related issues.

@@ -59,9 +59,15 @@ except ImportError:
     TileGrid = None  # type: ignore[misc, assignment]
 
 # Register xarray BandMath accessor (ds.bandmath.ndvi(), etc.)
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _version
+
 import pixelquery.core.bandmath
 
-__version__ = "0.1.0"
+try:
+    __version__ = _version("pixelquery")
+except PackageNotFoundError:
+    __version__ = "0.0.0+unknown"
 
 __all__ = [
     "DataArray",

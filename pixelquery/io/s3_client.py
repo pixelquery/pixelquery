@@ -87,11 +87,6 @@ class PixelQueryS3:
         if allow_http:
             os.environ.setdefault("AWS_ALLOW_HTTP", "true")
 
-        # Apply codecs patch
-        from pixelquery._internal.codecs import patch_imagecodecs
-
-        patch_imagecodecs()
-
         # Setup Icechunk
         import icechunk
 
@@ -171,8 +166,13 @@ class PixelQueryS3:
         paths = []
         try:
             for chunk in obstore.list(self._s3_store, prefix=prefix):
-                for entry in chunk if isinstance(chunk, list) else [chunk]:
-                    p = entry["path"] if isinstance(entry, dict) else entry.path
+                # obstore.list yields either a list of ObjectMeta or a single
+                # ObjectMeta depending on the backend; normalize before iteration.
+                entries = chunk if isinstance(chunk, list) else [chunk]
+                for entry in entries:
+                    # Some backends yield dict-like records, others yield
+                    # ObjectMeta objects with a .path attribute.
+                    p = entry["path"] if isinstance(entry, dict) else entry.path  # type: ignore[union-attr]
                     if p.endswith((".tif", ".tiff")):
                         paths.append(f"{self._prefix}{p}")
         except Exception as exc:

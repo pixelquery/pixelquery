@@ -6,7 +6,10 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "Apache-2.0"}
 authors = [
-    {name = "PixelQuery Contributors"}
+    {name = "Hoyoung Son", email = "thsghdud13@gmail.com"}
+]
+maintainers = [
+    {name = "Hoyoung Son", email = "thsghdud13@gmail.com"}
 ]
 keywords = [
     "satellite",
@@ -23,13 +26,16 @@ keywords = [
     "earth-observation"
 ]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: GIS",
     "Topic :: Scientific/Engineering :: Image Processing",
     "Typing :: Typed",
@@ -49,7 +55,7 @@ full = [
     "shapely>=2.0.0",
 ]
 
-# Icechunk virtual zarr storage (zero-copy COG references)
+# Icechunk virtual zarr storage (zero-copy COG references) — recommended
 icechunk = [
     "icechunk>=1.1.18",
     "virtualizarr>=2.4.0",
@@ -66,7 +72,7 @@ icechunk = [
     "affine>=2.3.0",
 ]
 
-# Legacy Iceberg backend (deprecated, use icechunk instead)
+# Legacy Iceberg backend (DEPRECATED — use [icechunk] instead, removal in 0.2.0)
 legacy = [
     "pyarrow>=17.0.0",
     "pyiceberg>=0.6.0",
@@ -77,7 +83,7 @@ legacy = [
     "shapely>=2.0.0",
 ]
 
-# S3 support
+# S3 support (alias of [icechunk])
 s3 = [
     "pixelquery[icechunk]",
 ]
@@ -93,9 +99,11 @@ xarray = [
 dev = [
     "pytest>=7.4.0",
     "pytest-cov>=4.1.0",
-    "mypy>=1.5.0",
+    "mypy>=1.13.0",
     "ruff>=0.8.0",
     "pre-commit>=3.5.0",
+    "build>=1.0.0",
+    "twine>=4.0.0",
 ]
 
 [project.urls]
@@ -103,7 +111,8 @@ Homepage = "https://github.com/pixelquery/pixelquery"
 Documentation = "https://github.com/pixelquery/pixelquery#readme"
 Repository = "https://github.com/pixelquery/pixelquery"
 Issues = "https://github.com/pixelquery/pixelquery/issues"
-Changelog = "https://github.com/pixelquery/pixelquery/releases"
+Changelog = "https://github.com/pixelquery/pixelquery/blob/main/CHANGELOG.md"
+"Release Notes" = "https://github.com/pixelquery/pixelquery/releases"
 
 [build-system]
 requires = ["hatchling"]
@@ -119,6 +128,10 @@ exclude = [
     "test_*.py",
     ".sisyphus/",
     ".claude/",
+    ".omc/",
+    "notebooks/",
+    "test_data/",
+    "docs/",
 ]
 
 [tool.pytest.ini_options]
@@ -160,7 +173,7 @@ exclude_lines = [
 ]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false
@@ -177,7 +190,6 @@ module = [
     "pyiceberg.*",
     "geopandas.*",
     "rasterio.*",
-    "duckdb.*",
     "shapely.*",
     "icechunk.*",
     "zarr.*",
@@ -186,12 +198,14 @@ module = [
 ]
 ignore_missing_imports = true
 
-# pyiceberg type stubs differ across versions/environments
+# pyiceberg type stubs differ across versions/environments;
+# obstore's ObjectMeta typing also varies between local installs and CI.
 [[tool.mypy.overrides]]
 module = [
     "pixelquery._internal.storage.iceberg_storage",
     "pixelquery.io.iceberg_reader",
     "pixelquery.catalog.iceberg",
+    "pixelquery.io.s3_client",
 ]
 warn_unused_ignores = false
 
