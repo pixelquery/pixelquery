@@ -39,7 +39,14 @@ scenes = pq.list_scenes(
 )
 
 # 3. Clip a field polygon (GeoJSON dict), compute NDVI, render PNG
-field_polygon = {"type": "Polygon", "coordinates": [...]}
+field_polygon = {
+    "type": "Polygon",
+    "coordinates": [[
+        [128.70, 36.31], [128.74, 36.31],
+        [128.74, 36.33], [128.70, 36.33],
+        [128.70, 36.31],
+    ]],
+}
 png_bytes = pq.clip_to_png(scenes[0], field_polygon, expression="ndvi")
 ```
 
@@ -48,7 +55,7 @@ png_bytes = pq.clip_to_png(scenes[0], field_polygon, expression="ndvi")
 - **Zero data copy.** Ingestion stores virtual chunk references, not pixels. Original COGs stay in S3 untouched.
 - **GDAL-free query path.** `crop`, `clip`, `ndvi`, `stats`, and `timeseries` use `xarray` + `numpy` + `shapely` — no `rasterio` import on the hot path. (`rasterio` is needed only for COG export.)
 - **S3-native.** Works with MinIO, AWS S3, and any S3-compatible store. No GDAL VFS configuration to babysit.
-- **Real-time serving.** A polygon clip → NDVI → PNG round-trip takes ~80 ms on a 4-band int16 COG, fast enough to serve from a request handler without a precomputed cache.
+- **Real-time serving.** A polygon clip → NDVI → PNG round-trip is fast enough to serve from a request handler without a precomputed cache. Reproducible benchmarks are landing in a follow-up PR.
 
 ## Core capabilities
 
@@ -93,21 +100,7 @@ collection = pq.to_stac_collection(collection_id="my-farm-2025")
 
 ## Performance
 
-Benchmark on MinIO (localhost), 4-band int16 874×3519 COGs:
-
-| Operation | Time |
-|---|---|
-| COG ingest (per file) | ~100 ms |
-| `list_scenes` (metadata only) | < 1 ms |
-| BBox crop | 39 ms |
-| Polygon clip | 58 ms |
-| Statistics (7 metrics) | 174 ms |
-| Timeseries (7 scenes) | 378 ms (54 ms/scene) |
-| Multi-field (3 polygons) | 140 ms |
-| **Clip → NDVI → PNG** | **80 ms** |
-| Clip → COG export | 8.7 s |
-
-At ~80 ms per polygon clip → NDVI → PNG, ~38 requests/second per process is achievable without any precomputed cache.
+Reproducible benchmarks for the ingest, query, and rendering paths are landing in a follow-up PR. The scripts will live under `benchmarks/` so any contributor can re-run them on their own COG archive — including yours — and compare numbers against the published baseline.
 
 ## When to use PixelQuery
 
