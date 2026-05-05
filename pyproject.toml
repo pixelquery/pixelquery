@@ -190,7 +190,6 @@ module = [
     "pyiceberg.*",
     "geopandas.*",
     "rasterio.*",
-    "duckdb.*",
     "shapely.*",
     "icechunk.*",
     "zarr.*",
@@ -199,12 +198,14 @@ module = [
 ]
 ignore_missing_imports = true
 
-# pyiceberg type stubs differ across versions/environments
+# pyiceberg type stubs differ across versions/environments;
+# obstore's ObjectMeta typing also varies between local installs and CI.
 [[tool.mypy.overrides]]
 module = [
     "pixelquery._internal.storage.iceberg_storage",
     "pixelquery.io.iceberg_reader",
     "pixelquery.catalog.iceberg",
+    "pixelquery.io.s3_client",
 ]
 warn_unused_ignores = false
 
